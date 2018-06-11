@@ -1,1 +1,1 @@
-python .\modpack_builder.py
+python .\modpack_installer.py
