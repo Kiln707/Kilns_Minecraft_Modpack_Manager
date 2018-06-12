@@ -1,0 +1,4 @@
+New Modpack  Version:0.0
+Configuration File Download Location:New Modpack
+Mods:
+EnderIO, 5.0.26, https://minecraft.curseforge.com/projects/ender-io, https://minecraft.curseforge.com/projects/ender-io/files/2569528/download
