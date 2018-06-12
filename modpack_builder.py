@@ -2,6 +2,8 @@ from tkinter import *
 from tkinter import filedialog
 from editabletreeview import EditableTreeview
 
+import urllib.request as request
+
 import json
 
 class ModpackBuilder(Frame):
@@ -54,9 +56,21 @@ class ModpackBuilder(Frame):
         del_row.place(x=95, y=280)
 
         label_config = Label(self, text='Config Download link(Zip of all configs):')
-        label_config.place(x=240, y=300)
+        label_config.place(x=240, y=280)
         self.text_config = Text(self, height=1, width=30)
-        self.text_config.place(y=300, x=460)
+        self.text_config.place(y=280, x=460)
+
+        label_server = Label(self, text='Server Address:')
+        label_server.place(x=25, y=320)
+        self.text_server = Text(self, height=1, width=30)
+        self.text_server.place(y=320, x=115)
+
+        label_forge = Label(self, text='Forge Version:')
+        label_forge.place(x=380, y=305)
+        self.text_forge = Text(self, height=1, width=30)
+        self.text_forge.place(y=305, x=460)
+        label_forge_warn = Label(self, text='WARNING: Forge Version must match Server\'s Forge version')
+        label_forge_warn.place(x=380, y=330)
 
         load_list = Button(self, text='Load', command=self.load_list)
         load_list.place(x=220, y=350)
@@ -67,7 +81,7 @@ class ModpackBuilder(Frame):
         export_list = Button(self, text="Export as text file", command=self.export)
         export_list.place(x=350, y=350)
 
-        cancel = Button(self, text="Cancel", command=exit)
+        cancel = Button(self, text="Exit", command=exit)
         cancel.place(x=50, y=350)
 
         manifest = Button(self, text="Manifest Builder", command=self.open_manifest_builder)
@@ -96,10 +110,13 @@ class ModpackBuilder(Frame):
             filename="%s.json"%filename
         file_data['modpack_name']=self.text_name.get('1.0', END).strip()
         file_data['version']=self.text_version.get('1.0', END).strip()
+        file_data['forge']=self.text_forge.get('1.0', END).strip()
         file_data['config_link']=self.text_config.get('1.0', END).strip()
+        file_data['server_address']=self.text_server.get('1.0', END).strip()
         modlist=[]
         for row in self.modpack_list.get_children():
-            modlist.append(self.modpack_list.item(row)['values'])
+            values = self.modpack_list.item(row)['values']
+            modlist.append({'name':values[0],'version':values[1],'info':values[2],'download':values[3]})
         file_data['modlist']=modlist
         with open(filename, 'w+') as file:
             json.dump(file_data, file)
@@ -120,12 +137,15 @@ class ModpackBuilder(Frame):
         self.text_config.delete('1.0', END)
         self.text_config.insert('end', file_data['config_link'])
 
+        self.text_forge.delete('1.0', END)
+        self.text_forge.insert('end', file_data['config_link'])
+
         self.num_items=0
         self.modpack_list.clear()
         for row in self.modpack_list.get_children():
             self.modpack_list.delete(row)
         for row in file_data['modlist']:
-            self.create_row(row)
+            self.create_row(row.items())
 
     def export(self):
         filename = filedialog.asksaveasfilename(title="Export Modpack List", filetypes=(('text files',"*.txt"),("all files","*.*")))
@@ -137,7 +157,7 @@ class ModpackBuilder(Frame):
         for row in self.modpack_list.get_children():
             modlist+=", ".join(str(e) for e in self.modpack_list.item(row)['values'])+'\n'
         with open(filename, 'w+') as file:
-            file.write("%(modpack_name)s  Version:%(version)s\nConfiguration File Download Location:%(config)s\nMods:\n%(modlist)s" % {'modpack_name':self.text_name.get('1.0', END).strip(), 'version':self.text_version.get('1.0', END).strip(), 'modlist':modlist, 'config':self.text_name.get('1.0', END).strip()})
+            file.write("%(modpack_name)s  Version:%(version)s\nForge Version:%(forge)s\nConfiguration File Download Location:%(config)s\nMods:\n%(modlist)s" % {'modpack_name':self.text_name.get('1.0', END).strip(), 'version':self.text_version.get('1.0', END).strip(), 'modlist':modlist, 'config':self.text_name.get('1.0', END).strip(), 'forge':self.text_forge.get('1.0',END).strip()})
 
     def open_manifest_builder(self):
         if self.manifest_builder_window:
