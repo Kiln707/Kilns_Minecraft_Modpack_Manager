@@ -1,4 +1,5 @@
 from tkinter import *
+from multiprocessing import Process
 import json
 import urllib.request
 import os
@@ -48,12 +49,37 @@ def get_latest_json(url=None, file_location=None):
     else:
         return None
 
-def install_modpack(modpack, data_directory=''):
+def make_modpack_directories(modpack, data_directory=''):
     if not modpack_isInstalled(modpack, data_directory):
         os.mkdir(os.path.join(data_directory, modpack[0]))
+    if not os.path.isdir(os.path.join(data_directory, modpack[0], "mods")):
         os.mkdir(os.path.join(data_directory, modpack[0], "mods"))
+    if not os.path.isdir(os.path.join(data_directory, modpack[0], 'config')):
         os.mkdir(os.path.join(data_directory, modpack[0], "config"))
-    
+    return os.mkdir(os.path.join(data_directory, modpack[0]))
+
+def install_config_files(config_dir, url=''):
+    pass
+
+def install_mod_files(mod_dir, (modname, modversion, modinfo, modurl)):
+    pass
+
+
+def install_modpack(modpack, data_directory=''):
+    modpack_dir=make_modpack_directories(modpack, data_directory)
+    mod_dir=os.path.join(modpack_dir, "mods")
+    config_dir=os.path.join(modpack_dir, "config")
+    modpack_json=get_latest_json(url=modpack[1],file_location=os.path.join(modpack_dir, filename_from_url(modpack[1])))
+    config_dl=Process(target=install_config_files, kwargs={'config_dir':config_dir, 'url':modpack_json['config_link']})
+    config_dl.start()
+    with Pool() as pool:
+        pool.map(install_mod_files, modpack_json['modlist'])
+
+
+
+
+
+
 
 def modpack_isInstalled(modpack, data_directory=''):
     return os.path.isdir(os.path.join(data_directory, modpack[0]))
