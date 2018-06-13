@@ -1,1 +1,1 @@
-python .\modpack_installer.py
+python modpack_installer.py --run

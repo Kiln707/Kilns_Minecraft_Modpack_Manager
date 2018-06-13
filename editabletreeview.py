@@ -74,9 +74,11 @@ class EditableTreeview(ttk.Treeview):
         self.bind('<Motion>', self.__on_mouse_motion)
         self.bind('<Configure>',
             lambda e: self.after_idle(self.__updateWnds))
+        self.bind('<MouseWheel>', self.__clear)
 
 
     def __on_button1(self, event):
+        self.clear()
         r = event.widget.identify_region(event.x, event.y)
         if r in ('separator', 'header'):
             self._header_clicked = True
@@ -106,6 +108,7 @@ class EditableTreeview(ttk.Treeview):
     def yview(self, *args):
         """Update inplace widgets position when doing vertical scroll"""
         self.after_idle(self.__updateWnds)
+        self.clear()
         ttk.Treeview.yview(self, *args)
 
     def yview_scroll(self, number, what):
@@ -189,6 +192,9 @@ class EditableTreeview(ttk.Treeview):
                 #del self._inplace_widgets[c]
 
     def clear(self):
+        self.__clear_inplace_widgets()
+
+    def __clear(self, event):
         self.__clear_inplace_widgets()
 
     def __get_display_columns(self):

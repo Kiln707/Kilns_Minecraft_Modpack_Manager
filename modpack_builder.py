@@ -48,6 +48,10 @@ class ModpackBuilder(Frame):
         self.modpack_list.bind('<<TreeviewInplaceEdit>>', self.update_row)
         self.create_row()
 
+        scroll = Scrollbar(self, command=self.modpack_list.yview)
+        scroll.pack( side=RIGHT, fill=Y )
+        self.modpack_list['yscrollcommand']=scroll.set
+
         #modify table buttons:
         new_row = Button(self, text="Add Mod", command=self.create_row)
         new_row.place(x=25, y=280)
@@ -87,6 +91,9 @@ class ModpackBuilder(Frame):
         manifest = Button(self, text="Manifest Builder", command=self.open_manifest_builder)
         manifest.place(x=550, y=350)
 
+    def onclick(self, event):
+        print(event.widget)
+
     def update_row(self, event):
         row = self.modpack_list.get_event_info()
         self.modpack_list.inplace_entry(row[0], row[1])
@@ -111,7 +118,10 @@ class ModpackBuilder(Frame):
         file_data['modpack_name']=self.text_name.get('1.0', END).strip()
         file_data['version']=self.text_version.get('1.0', END).strip()
         file_data['forge']=self.text_forge.get('1.0', END).strip()
-        file_data['config_link']=self.text_config.get('1.0', END).strip()
+        configlink=self.text_config.get('1.0', END).strip()
+        if not configlink.startswith('http://'):
+            configlink='http://%s'%configlink
+        file_data['config_link']=configlink
         file_data['server_address']=self.text_server.get('1.0', END).strip()
         modlist=[]
         for row in self.modpack_list.get_children():
@@ -138,14 +148,18 @@ class ModpackBuilder(Frame):
         self.text_config.insert('end', file_data['config_link'])
 
         self.text_forge.delete('1.0', END)
-        self.text_forge.insert('end', file_data['config_link'])
+        self.text_forge.insert('end', file_data['forge'])
 
         self.num_items=0
         self.modpack_list.clear()
         for row in self.modpack_list.get_children():
             self.modpack_list.delete(row)
         for row in file_data['modlist']:
-            self.create_row(row.items())
+            mod=[]
+            for key, value in row.items():
+                print(key, value)
+                mod.append(value)
+            self.create_row(mod)
 
     def export(self):
         filename = filedialog.asksaveasfilename(title="Export Modpack List", filetypes=(('text files',"*.txt"),("all files","*.*")))
