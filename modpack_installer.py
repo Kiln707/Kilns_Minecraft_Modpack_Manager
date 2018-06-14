@@ -234,6 +234,25 @@ def update_modpack(modpack, data_directory, servername):
             shutil.rmtree(config_dir)
         install_modpack(modpack, data_directory, servername)
 
+def uninstall_modpack(modpack_info, data_dir):
+    print("Uninstalling modpack")
+    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
+    modpack_dir=os.path.join(data_dir, modpack_info[0])
+    json_filename=os.path.join(modpack_dir, filename_from_url(modpack_info[1]))
+    profile_json=os.path.join(minecraft_dir, "launcher_profiles.json")
+    json = open_json(json_filename)
+    if json:
+        modpack_name=json['modpack_name']
+        profile = open_json(profile_json)
+        profile['profiles'].pop(modpack_name, None)
+        save_json(profile_json, profile)
+
+def uninstall_manifest(manifest_filename, data_dir):
+    manifest = open_json(manifest_filename)
+    print("Uninstalling manifest")
+    if manifest:
+        for modpack in manifest['modlist']:
+            uninstall_modpack(modpack, data_dir)
 
 def update_manifest(manifest_url, data_dir, manifest_filename):
     latest_manifest=download_json(manifest_url)
@@ -269,7 +288,9 @@ def schedule(data_dir):
     if os.name == 'nt':
         result = run(['schtasks.exe', '/QUERY', '/TN', 'RBG_Modpack_Manager'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if result.returncode:
-            run('schtasks.exe /CREATE /SC ONLOGON /RU '+getpass.getuser()+' /TN "RBG_Modpack_Manager" /TR "%s quiet"'%os.path.join(data_dir, __file__.strip('.\/')), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            with open(os.path.join(data_dir, 'autoupdate.cmd'), 'w+') as f:
+                f.write('%s quiet update'%os.path.join(data_dir, __file__.strip('.\/')))
+            run('schtasks.exe /CREATE /SC ONLOGON /RU '+getpass.getuser()+" /TN 'RBG_Modpack_Manager' /TR '%s'"%os.path.join(data_dir, 'autoupdate.cmd'), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     #else:
         # result = run('crontab -l', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         # if os.path.join(data_dir, __file__.strip('.\/')) in result.stdout:
@@ -332,6 +353,7 @@ def run_installer():
     return ''
 
 if __name__ == "__main__":
+    print(sys.argv)
     quiet=False
     action='install'
     if len(sys.argv) > 1 and sys.argv[1] == 'quiet':
@@ -355,10 +377,11 @@ if __name__ == "__main__":
         data_directory=os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
     else:
         data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
-    if ( action=='install' and not quiet and not is_admin()):
+
+    if ( not quiet and not is_admin()):
         action = run_installer()
 
-    if action == 'install' and data_directory != os.path.dirname(os.path.realpath(__file__)):
+    if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
         if os.name == 'nt' and not is_admin():
             ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, 'quiet', 1)
             exit(0)
@@ -367,6 +390,7 @@ if __name__ == "__main__":
         schedule(data_directory)
     elif action == 'uninstall':
         unschedule()
+        uninstall_manifest(os.path.join(data_directory, str(filename_from_url(MANIFEST_URL))), data_directory)
         shutil.rmtree(data_directory)
         exit(0)
     elif action == 'cancel':
