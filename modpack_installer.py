@@ -1,13 +1,14 @@
-from io import BytesIO
+
+from functools import partial
 from itertools import product
-from nbtlib import nbt, List, Compound, String
+from io import BytesIO
+from multiprocessing import Pool, Process
+from nbtlib import Compound, List, nbt, String
 from subprocess import run
 from tkinter import *
 from zipfile import ZipFile
-from multiprocessing import Process, Pool
 import urllib.request as request
-import json, os, tempfile, shutil, subprocess, subprocess, time, datetime, getpass, ctypes, sys
-from functools import partial
+import ctypes, datetime, getpass, json, os, shutil, subprocess, sys, tempfile, time
 
 def download(url=None):
     if not url:
