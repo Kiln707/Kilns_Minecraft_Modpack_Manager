@@ -7,6 +7,7 @@ from zipfile import ZipFile
 from multiprocessing import Process, Pool
 import urllib.request as request
 import json, os, tempfile, shutil, subprocess, subprocess, time, datetime, getpass, ctypes, sys
+from functools import partial
 
 def download(url=None):
     if not url:
@@ -102,6 +103,10 @@ def remove_old_mods(modlist, mod_dir):
 
 def modpack_isInstalled(modpack, data_dir):
     return os.path.isfile(os.path.join(data_dir, modpack[0], filename_from_url(modpack[1])))
+
+def make_server_directory(dir_path):
+    if not os.path.isdir(dir_path):
+        os.mkdir(dir_path)
 
 def make_modpack_directories(modpack, data_directory=''):
     if not os.path.isdir(os.path.join(data_directory, modpack)):
@@ -260,18 +265,81 @@ def is_admin():
             return True
         return False
 
-class Installer:
-    def __init__(self, data_dir):
+def schedule(data_dir):
+    if os.name == 'nt':
+        result = run(['schtasks.exe', '/QUERY', '/TN', 'RBG_Modpack_Manager'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if result.returncode:
+            run('schtasks.exe /CREATE /SC ONLOGON /RU '+getpass.getuser()+' /TN "RBG_Modpack_Manager" /TR "%s quiet"'%os.path.join(data_dir, __file__.strip('.\/')), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    #else:
+        # result = run('crontab -l', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # if os.path.join(data_dir, __file__.strip('.\/')) in result.stdout:
+        #     with open('tmpfile', 'w+') as f:
+        #         f.write(result.stdout)
+        #     run('crontab tmpfile', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        #     os.remove('tmpfile')
+
+def unschedule():
+    if os.name == 'nt':
+        result = run(['schtasks.exe', '/QUERY', '/TN', '%s_Modpack_Manager'%SERVERNAME], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if result.returncode:
+            run('schtasks.exe /DELETE /TN "%s_Modpack_Manager"'%SERVERNAME, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    #else:
+        # result = run('crontab -l', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # if os.path.join(data_dir, __file__.strip('.\/')) in result.stdout:
+        #     with open('tmpfile', 'w+') as f:
+        #         f.write(result.stdout)
+        #     run('crontab tmpfile', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        #     os.remove('tmpfile')
+
+def copy_program(data_dir):
+    with open(os.path.join(data_dir, __file__.strip('.\/')), "wb+") as f:
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__.strip('.\/')), "rb") as o:
+            f.write(o.read())
+
+class Installer(Frame):
+    def __init__(self, data_dir, server):
+        root=Tk()
+        super().__init__(root)
+        self.master = root
         self.data_dir=data_dir
+        self.server=server
+        self.value=None
+        if self.isInstalled():
+            self.uninstall=Button(self.master, text="Uninstall %s Modpack Manager"%self.server, command=partial(self.onButtonClick, value='uninstall')).grid(row=0, column=0, padx=10, pady=10)
+            self.update=Button(self.master, text="Check for Updates", command=partial(self.onButtonClick, value='update')).grid(row=0, column=1, padx=10, pady=10)
+        else:
+            self.install=Button(self.master, text="Install %s Modpack Manager"%self.server, command=partial(self.onButtonClick, value='install')).grid(row=0, column=0, padx=10, pady=10)
+        self.cancel=Button(self.master, text="Cancel", command=partial(self.onButtonClick, value='cancel')).grid(row=1, column=0, padx=10, pady=10)
+
+    def run(self):
+        self.master.mainloop()
+
+    def return_value(self):
+        return self.value
 
     def isInstalled(self):
-        return os.path.isfile(os.path.join(data_dir, __file__.strip('.\/')))
+        return os.path.isfile(os.path.join(self.data_dir, __file__.strip('.\/')))
+
+    def onButtonClick(self, value):
+        self.value=value
+        self.master.destroy()
+
+def run_installer():
+    if not quiet:
+        installer=Installer(data_directory, SERVERNAME)
+        installer.run()
+        return installer.return_value()
+    return ''
 
 if __name__ == "__main__":
-    run=False
-    if len(sys.argv) > 1:
-        run=True
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__.strip('.\/'))
+    quiet=False
+    action='install'
+    if len(sys.argv) > 1 and sys.argv[1] == 'quiet':
+        quiet=True
+    if len(sys.argv) > 2:
+        action=sys.argv[2]
+
+    #os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__.strip('.\/'))
     SERVERNAME='RelatedbyGaming'
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     if not os.path.isdir(minecraft_dir):
@@ -287,25 +355,22 @@ if __name__ == "__main__":
         data_directory=os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
     else:
         data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
+    if ( action=='install' and not quiet and not is_admin()):
+        action = run_installer()
 
-    if not run and data_directory != os.path.dirname(os.path.realpath(__file__)):
-        if not is_admin():
-            ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, 'None', 1)
+    if action == 'install' and data_directory != os.path.dirname(os.path.realpath(__file__)):
+        if os.name == 'nt' and not is_admin():
+            ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, 'quiet', 1)
             exit(0)
-        with open(os.path.join(data_directory, __file__.strip('.\/')), "wb+") as f:
-            with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__.strip('.\/')), "rb") as o:
-                f.write(o.read())
-        if os.name == 'nt':
-            result = run(['schtasks.exe', '/QUERY', '/TN', 'RBG_Modpack_Manager'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            if result.returncode:
-                run('schtasks.exe /CREATE /SC ONLOGON /RU '+getpass.getuser()+' /TN "RBG_Modpack_Manager" /TR "'+os.path.join(data_directory, __file__.strip('.\/'))+' --run"', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        else:
-            result = run('crontab -l', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            if os.path.join(data_directory, __file__.strip('.\/')) in result.stdout:
-                with open('tmpfile', 'w+') as f:
-                    f.write(result.stdout)
-                run('crontab tmpfile', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                os.remove('tmpfile')
+        make_server_directory(data_directory)
+        copy_program(data_directory)
+        schedule(data_directory)
+    elif action == 'uninstall':
+        unschedule()
+        shutil.rmtree(data_directory)
+        exit(0)
+    elif action == 'cancel':
+        exit(0)
 
     manifest_filename=os.path.join(data_directory, str(filename_from_url(MANIFEST_URL)))
     manifest = update_manifest(manifest_url=MANIFEST_URL, data_dir=data_directory, manifest_filename=manifest_filename)
