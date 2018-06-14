@@ -5,17 +5,20 @@ from io import BytesIO
 from multiprocessing import Pool, Process
 from nbtlib import Compound, List, nbt, String
 from subprocess import run
+from sys import exit
 from tkinter import *
 from zipfile import ZipFile
 import urllib.request as request
-import ctypes, datetime, getpass, json, os, shutil, subprocess, sys, tempfile, time
+import ctypes, datetime, getpass, json, logging, os, shutil, subprocess, sys, tempfile, time, traceback
 
 def download(url=None):
     if not url:
+        logger.debug('No URL')
         return None
     if not ( url.startswith('http://') or url.startswith('https://') ):
         url='http://'+url
     try:
+        logger.debug('Downloading from %s'%url)
         response = request.urlopen(url)
         return response.read()
     except:
@@ -26,11 +29,16 @@ def filename_from_url(url=None):
         pos=str(url).rfind('/')+1
         return str(url)[int(pos):]
 
+def filename_from_path(path=None):
+    if path:
+        pos=str(path).rfind('\\')+1
+        return str(path)[int(pos):]
+
 def downloadExtact_zip(dir, url=''):
+    logger.debug("Downloading zipfile from %s"%url)
     resp = download(url)
     zipfile = ZipFile(BytesIO(resp))
     zipfile.extractall(dir)
-    print("Downloaded configs from %s"%url)
 
 def download_json(url=None):
     data = download(url)
@@ -44,11 +52,13 @@ def download_file(url, filename):
 
 def save_json(file_location=None, data=None):
     if file_location and data:
+        logger.debug("Writing json file at %s"%file_location)
         with open(file_location,'w+') as file:
             json.dump(data, file)
 
 def open_json(file_location=None):
     if file_location:
+        logger.debug("Opening json file at %s"%file_location)
         with open(file_location,'r') as file:
             data = json.load(file)
         return data
@@ -81,9 +91,11 @@ def remove_old_modpacks(manifest, data_dir):
         available=False
         for modpack in manifest['modlist']:
             if Imodpack == modpack[0]:
+                logger.info("Keeping modpack %s"%Imodpack)
                 available=True
                 break
         if not available:
+            logger.info("deleting modpack %s"%Imodpack)
             shutil.rmtree(os.path.join(data_dir, Imodpack))
 
 def remove_old_mods(modlist, mod_dir):
@@ -100,6 +112,7 @@ def remove_old_mods(modlist, mod_dir):
                     keep=True
                     break
             if not keep:
+                logger.info("Removing %s, no longer in modpack"%file)
                 os.remove(modfile)
 
 def modpack_isInstalled(modpack, data_dir):
@@ -122,9 +135,9 @@ def install_mod_files(mod_data):
     filename=os.path.join(mod_data['dir'], mod_filename(mod_data['name'],mod_data['version']))
     if not os.path.isfile(filename):
         download_file(url=mod_data['download'], filename=filename)
-        print("Downloaded %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
+        logger.debug("Downloaded %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
     else:
-        print("%s Version: %s, is already installed"%(mod_data['name'],mod_data['version']))
+        logger.debug("%s Version: %s, is already installed"%(mod_data['name'],mod_data['version']))
 
 def create_mc_directories(minecraft_dir):
     if not os.path.isdir(os.path.join(minecraft_dir, 'versions')):
@@ -136,18 +149,18 @@ def install_minecraft(minecraft_version, mc_dir):
     minecraft_manifest_url="https://launchermeta.mojang.com/mc/game/version_manifest.json"
 
     if not os.path.isdir(mc_version_dir):
-        os.mkdir(mc_version_dir)
+        os.makedirs(mc_version_dir)
     for version in download_json(minecraft_manifest_url)['versions']:
         if str(version['id']) == str(minecraft_version):
             if not ( os.path.isfile(os.path.join(mc_version_dir, filename_from_url(version['url']))) and os.path.isfile(os.path.join(mc_version_dir, "%s.jar"%minecraft_version)) ):
-                print("Downloading Minecraft %s"%minecraft_version)
+                logger.debug("Downloading Minecraft %s"%minecraft_version)
                 save_json(os.path.join(mc_version_dir, filename_from_url(version['url'])), download_json(version['url']))
                 version_json = open_json(os.path.join(mc_version_dir, filename_from_url(version['url'])))
                 with open(os.path.join(mc_version_dir, "%s.jar"%minecraft_version), 'wb') as f:
                     f.write(download(version_json['downloads']['client']['url']))
-                print('Minecraft Version: %s Installation Complete'%minecraft_version)
+                logger.debug('Minecraft Version: %s Installation Complete'%minecraft_version)
             else:
-                print('Minecraft Version: %s already installed'%minecraft_version)
+                logger.debug('Minecraft Version: %s already installed'%minecraft_version)
 
 def install_forge(forge_version, minecraft_version, mc_dir):
     forge_json=os.path.join(mc_dir, 'versions', minecraft_version+'-forge'+forge_version, minecraft_version+'-forge'+forge_version+'.json')
@@ -155,18 +168,18 @@ def install_forge(forge_version, minecraft_version, mc_dir):
     forge_dl_url="https://files.minecraftforge.net/maven/net/minecraftforge/forge/%s/forge-%s-installer.jar"%(forge_version, forge_version)
 
     if not (os.path.isfile(forge_json) and os.path.isfile(forge_jar) ):
-        print("Installing Minecraft Forge version: %s"%forge_version)
+        logger.debug("Installing Minecraft Forge version: %s"%forge_version)
         dirpath = tempfile.mkdtemp()
         forge_installer=os.path.join(dirpath, "forge-%s-installer.jar"%forge_version)
         with open(forge_installer, 'wb') as f:
             f.write(download(forge_dl_url))
             result = run(["java", "-jar", forge_installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            print("Forge Installer Exit Code:", result.returncode)
-            print(result.stdout.decode('UTF-8'))
+            logger.debug("Forge Installer Exit Code:", result.returncode)
+            logger.debug(result.stdout.decode('UTF-8'))
         shutil.rmtree(dirpath)
-        print('Forge installed')
+        logger.debug('Forge %s installed'%forge_version)
     else:
-        print("Minecraft Forge Version: %s is already installed"%forge_version)
+        logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
 
 def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     forge_version=modpack_info['forge']
@@ -184,13 +197,16 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
 
     profile['profiles'].pop(modpack_name, None)
     profile['profiles'][modpack_name]=modpack_profile
+    logger.info("Installed profile for %s"%modpack_name)
     save_json(profile_json, profile)
     #Servers.dat file section
-    server_dat_file=os.path.join(data_directory, "servers.dat")
+    server_dat_file=os.path.join(data_directory, modpack_name, "servers.dat")
+    logger.debug("Writing server connection file to %s"%server_dat_file)
     if os.path.isfile(server_dat_file):
         os.remove(server_dat_file)
     nbtfile = nbt.File({'':nbt.Compound({'servers':List[nbt.Compound]([nbt.Compound({'ip':String(modpack_info['server_address']), 'name': String(servername)})])})})
     nbtfile.save(server_dat_file, gzipped=False)
+    logger.info("Created server connection")
 
 def append_modDir(modpack_json, mod_dir):
     for modinfo in modpack_json['modlist']:
@@ -207,36 +223,43 @@ def install_modpack(modpack, data_directory='', servername=''):
     forge_version=modpack_json['forge']
     minecraft_version=forge_version[:forge_version.rfind('-')]
 
-    processes.append(Process(target=install_minecraft, kwargs={'minecraft_version': minecraft_version, 'mc_dir': minecraft_dir}))
-    processes.append(Process(target=install_forge, kwargs={'forge_version': forge_version, 'minecraft_version':minecraft_version,'mc_dir': minecraft_dir}))
-    config_dl=None
-    if modpack_json['config_link']:
-        processes.append(Process(target=downloadExtact_zip, kwargs={'dir':config_dir, 'url':modpack_json['config_link']}))
-    for process in processes:
-        process.start()
+    install_minecraft(minecraft_version, minecraft_dir)
+    install_forge(forge_version, minecraft_version, minecraft_dir)
+    downloadExtact_zip(dir=config_dir, url=modpack_json['config_link'])
 
-    with Pool() as pool:
-        pool.imap_unordered(install_mod_files, modpack_json['modlist'])
-        pool.close()
-        insert_launcher_info(modpack_info=modpack_json, data_dir=modpack_dir, minecraft_dir=minecraft_dir, servername=servername)
-        pool.join()
-    for process in processes:
-        process.join()
+    # processes.append(Process(target=install_minecraft, kwargs={'minecraft_version': minecraft_version, 'mc_dir': minecraft_dir}))
+    # processes.append(Process(target=install_forge, kwargs={'forge_version': forge_version, 'minecraft_version':minecraft_version,'mc_dir': minecraft_dir}))
+    # config_dl=None
+    # if modpack_json['config_link']:
+    #     processes.append(Process(target=downloadExtact_zip, kwargs={'dir':config_dir, 'url':modpack_json['config_link']}))
+    # for process in processes:
+    #    process.start()
+    for mod in modpack_json['modlist']:
+        install_mod_files(mod)
+    insert_launcher_info(modpack_info=modpack_json, data_dir=modpack_dir, minecraft_dir=minecraft_dir, servername=servername)
+
+    # with Pool() as pool:
+    #     pool.imap_unordered(install_mod_files, modpack_json['modlist'])
+    #     pool.close()
+    #     insert_launcher_info(modpack_info=modpack_json, data_dir=modpack_dir, minecraft_dir=minecraft_dir, servername=servername)
+    #     pool.join()
+    # for process in processes:
+    #     process.join()
 
 def update_modpack(modpack, data_directory, servername):
-        minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
-        modpack_dir=make_modpack_directories(modpack[0], data_directory)
-        mod_dir=os.path.join(modpack_dir, "mods")
-        config_dir=os.path.join(modpack_dir, "config")
-        latest_json=download_json(modpack[1])
-
-        remove_old_mods(latest_json, mod_dir)
-        if os.path.isdir(config_dir):
-            shutil.rmtree(config_dir)
-        install_modpack(modpack, data_directory, servername)
+    logger.info('Updating modpack %s'%modpack[0])
+    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
+    modpack_dir=make_modpack_directories(modpack[0], data_directory)
+    mod_dir=os.path.join(modpack_dir, "mods")
+    config_dir=os.path.join(modpack_dir, "config")
+    latest_json=download_json(modpack[1])
+    remove_old_mods(latest_json, mod_dir)
+    if os.path.isdir(config_dir):
+        shutil.rmtree(config_dir)
+    install_modpack(modpack, data_directory, servername)
 
 def uninstall_modpack(modpack_info, data_dir):
-    print("Uninstalling modpack")
+    logger.info("Uninstalling modpack %s"%modpack_info[0])
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     modpack_dir=os.path.join(data_dir, modpack_info[0])
     json_filename=os.path.join(modpack_dir, filename_from_url(modpack_info[1]))
@@ -250,7 +273,7 @@ def uninstall_modpack(modpack_info, data_dir):
 
 def uninstall_manifest(manifest_filename, data_dir):
     manifest = open_json(manifest_filename)
-    print("Uninstalling manifest")
+    logger.debug("Uninstalling manifest")
     if manifest:
         for modpack in manifest['modlist']:
             uninstall_modpack(modpack, data_dir)
@@ -262,6 +285,7 @@ def update_manifest(manifest_url, data_dir, manifest_filename):
         current_manifest=open_json(manifest_filename)
     if current_manifest:
         if update_available(latest_manifest, current_manifest):
+            logger.info("Update is available, Updating modpacks!")
             save_json(manifest_filename, latest_manifest)
             remove_old_modpacks(manifest, data_dir)
     else:
@@ -287,11 +311,14 @@ def is_admin():
 
 def schedule(data_dir):
     if os.name == 'nt':
-        result = run(['schtasks.exe', '/QUERY', '/TN', 'RBG_Modpack_Manager'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = run(['schtasks.exe', '/QUERY', '/TN', '%s_Modpack_Manager'%SERVERNAME], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if result.returncode:
+            logger.debug("Auto update was not scheduled, installing")
             with open(os.path.join(data_dir, 'autoupdate.cmd'), 'w+') as f:
-                f.write('%s quiet update'%os.path.join(data_dir, __file__.strip('.\/')))
-            run('schtasks.exe /CREATE /SC ONLOGON /RU '+getpass.getuser()+" /TN 'RBG_Modpack_Manager' /TR '%s'"%os.path.join(data_dir, 'autoupdate.cmd'), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                f.write('%s quiet update'%os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')))
+            run("schtasks.exe /CREATE /SC ONLOGON /RU %(user)s /TN %(servername)s_Modpack_Manager /TR %(executable)s"%({'user':getpass.getuser(), 'servername':SERVERNAME, 'executable': os.path.join(data_dir, 'autoupdate.cmd')}), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        else:
+            logger.debug("Auto update is already scheduled")
     #else:
         # result = run('crontab -l', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         # if os.path.join(data_dir, __file__.strip('.\/')) in result.stdout:
@@ -301,10 +328,14 @@ def schedule(data_dir):
         #     os.remove('tmpfile')
 
 def unschedule():
+    logger.debug("Unscheduling AutoUpdate")
     if os.name == 'nt':
+        print(SERVERNAME)
         result = run(['schtasks.exe', '/QUERY', '/TN', '%s_Modpack_Manager'%SERVERNAME], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        if result.returncode:
-            run('schtasks.exe /DELETE /TN "%s_Modpack_Manager"'%SERVERNAME, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if not result.returncode:
+            logger.debug("Removing scheduled task")
+            result = run("schtasks.exe /DELETE /F /TN %s_Modpack_Manager"%SERVERNAME, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            logger.debug("Delete Task Exit Code: %s, %s"%(result.returncode, result.stdout))
     #else:
         # result = run('crontab -l', stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         # if os.path.join(data_dir, __file__.strip('.\/')) in result.stdout:
@@ -314,8 +345,11 @@ def unschedule():
         #     os.remove('tmpfile')
 
 def copy_program(data_dir):
-    with open(os.path.join(data_dir, __file__.strip('.\/')), "wb+") as f:
-        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__.strip('.\/')), "rb") as o:
+    logger.debug("Copying program from %s to %s"%( sys.argv[0], os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')) ))
+    with open(os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')), "wb+") as f:
+        logger.debug("Opened %s for writing"%os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')))
+        with open(sys.argv[0],"rb") as o:
+            logger.debug("Opened %s for reading"% sys.argv[0])
             f.write(o.read())
 
 class Installer(Frame):
@@ -323,6 +357,9 @@ class Installer(Frame):
         root=Tk()
         super().__init__(root)
         self.master = root
+        #self.master.iconbitmap(os.path.join(os.getcwd(), 'rbg_mc.ico'))
+        self.master.title("%s Modpack Manager"%server)
+        self.master.protocol("WM_DELETE_WINDOW", self.onexit)
         self.data_dir=data_dir
         self.server=server
         self.value=None
@@ -340,21 +377,24 @@ class Installer(Frame):
         return self.value
 
     def isInstalled(self):
-        return os.path.isfile(os.path.join(self.data_dir, __file__.strip('.\/')))
+        return os.path.isfile(os.path.join(self.data_dir, filename_from_path(sys.argv[0]).strip('.\/')))
 
     def onButtonClick(self, value):
         self.value=value
         self.master.destroy()
+
+    def onexit(self):
+        self.onButtonClick('cancel')
 
 def run_installer():
     if not quiet:
         installer=Installer(data_directory, SERVERNAME)
         installer.run()
         return installer.return_value()
+    logger.debug("Quiet installation")
     return ''
 
 if __name__ == "__main__":
-    print(sys.argv)
     quiet=False
     action='install'
     if len(sys.argv) > 1 and sys.argv[1] == 'quiet':
@@ -366,7 +406,8 @@ if __name__ == "__main__":
     SERVERNAME='RelatedbyGaming'
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     if not os.path.isdir(minecraft_dir):
-        print("ERROR! Please run Minecraft launcher before installing.")
+        logger.debug("ERROR! Please run Minecraft launcher before installing.")
+        input("Press Enter to continue...")
         exit(1)
     #Editable Variables for installer
     MANIFEST_URL = "http://relatedbygaming.ddns.net/files/rbgtest.manifest"
@@ -379,25 +420,71 @@ if __name__ == "__main__":
     else:
         data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
 
+    if not os.path.isdir(data_directory):
+        os.mkdir(data_directory)
+
+    #Initializeing Logger
+    logger = logging.getLogger('Modpack_Manager')#logging.basicConfig(filename=os.path.join(data_directory, 'modpack-manager.log'), level=logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler(os.path.join(data_directory, 'modpack-manager.log'))
+    fh.setLevel(logging.DEBUG)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    logger.debug("Logger Initialized")
+
+    logger.debug("Arguments %s"%sys.argv)
+
     if ( not quiet and not is_admin()):
+        logger.info("Running GUI Installer")
         action = run_installer()
 
     if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
-        if os.name == 'nt' and not is_admin():
-            ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, 'quiet', 1)
-            exit(0)
-        make_server_directory(data_directory)
-        copy_program(data_directory)
-        schedule(data_directory)
+        logger.info("Running Modpack Manager Installation.")
+        if os.name == 'nt':
+            if not is_admin():
+                logger.debug("Restarting as Administrator")
+                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet", '', 6)
+                if not result>32:
+                    logger.error("Failed to install modpack Manager")
+                    exit(1)
+            else:
+                try:
+                    make_server_directory(data_directory)
+                    copy_program(data_directory)
+                    schedule(data_directory)
+                except:
+                    logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
+                exit(0)
+        logging.debug("Finished installing")
     elif action == 'uninstall':
-        unschedule()
-        uninstall_manifest(os.path.join(data_directory, str(filename_from_url(MANIFEST_URL))), data_directory)
-        shutil.rmtree(data_directory)
+        if os.name == 'nt':
+            if not is_admin():
+                logger.debug("Restarting as Administrator")
+                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], 'quiet uninstall', '', 6)
+            else:
+                logger.info("Running Modpack Manager uninstall")
+                unschedule()
+                uninstall_manifest(os.path.join(data_directory, str(filename_from_url(MANIFEST_URL))), data_directory)
+                logging.shutdown()
+                shutil.rmtree(data_directory)
         exit(0)
     elif action == 'cancel':
+        logger.info("User cancelled operation")
         exit(0)
-
+    logger.info("Updating/Installing Modpacks")
     manifest_filename=os.path.join(data_directory, str(filename_from_url(MANIFEST_URL)))
-    manifest = update_manifest(manifest_url=MANIFEST_URL, data_dir=data_directory, manifest_filename=manifest_filename)
+    manifest = None
+    try:
+        manifest = update_manifest(manifest_url=MANIFEST_URL, data_dir=data_directory, manifest_filename=manifest_filename)
+    except :
+        logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
     if not manifest:
+        logger.debug("Failed to download manifest from %s"%MANIFEST_URL)
         exit(1)

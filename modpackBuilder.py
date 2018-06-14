@@ -85,7 +85,7 @@ class ModpackBuilder(Frame):
         export_list = Button(self, text="Export as text file", command=self.export)
         export_list.place(x=350, y=350)
 
-        cancel = Button(self, text="Exit", command=exit)
+        cancel = Button(self, text="Exit", command=self.master.destroy)
         cancel.place(x=50, y=350)
 
         manifest = Button(self, text="Manifest Builder", command=self.open_manifest_builder)
