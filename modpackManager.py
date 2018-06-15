@@ -9,7 +9,7 @@ from sys import exit
 from tkinter import *
 from zipfile import ZipFile
 import urllib.request as request
-import ctypes, datetime, getpass, json, logging, os, shutil, subprocess, sys, tempfile, time, traceback
+import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys, tempfile, time, traceback
 
 def download(url=None):
     if not url:
@@ -33,6 +33,11 @@ def filename_from_path(path=None):
     if path:
         pos=str(path).rfind('\\')+1
         return str(path)[int(pos):]
+
+def split_versions(version=''):
+    if version:
+        pos = str(version).rfind('-')
+        return ( str(version)[:int(pos)], str(version)[int(pos+1):])
 
 def downloadExtact_zip(dir, url=''):
     logger.debug("Downloading zipfile from %s"%url)
@@ -122,6 +127,19 @@ def make_server_directory(dir_path):
     if not os.path.isdir(dir_path):
         os.mkdir(dir_path)
 
+def extract_mc_forge_versions(forge_version):
+    versions = split_versions(forge_version)
+    mc1_ver='\d*.\d*.\d*'
+    mc2_ver='\d*.\d*'
+    if re.match('\d*.\d*.\d*.\d*', versions[0]):
+        if re.match(mc1_ver, versions[1]) or re.match(mc2_ver, versions[1]):
+            return versions[1], versions[0]
+    elif re.match('\d*.\d*.\d*.\d*', versions[1]):
+        if re.match(mc1_ver, versions[0]) or re.match(mc2_ver, versions[0]):
+            return versions[0], versions[1]
+    return None, None
+
+
 def make_modpack_directories(modpack, data_directory=''):
     if not os.path.isdir(os.path.join(data_directory, modpack)):
         os.mkdir(os.path.join(data_directory, modpack))
@@ -164,22 +182,36 @@ def install_minecraft(minecraft_version, mc_dir):
 
 def install_forge(forge_version, minecraft_version, mc_dir):
     forge_json=os.path.join(mc_dir, 'versions', minecraft_version+'-forge'+forge_version, minecraft_version+'-forge'+forge_version+'.json')
-    forge_jar=os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', forge_version, 'forge-'+forge_version+'.jar')
-    forge_dl_url="https://files.minecraftforge.net/maven/net/minecraftforge/forge/%s/forge-%s-installer.jar"%(forge_version, forge_version)
+    forge_jar_paths=[os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(mc_ver)s-%(forge_ver)s"%({'mc_ver':minecraft_version, 'forge_ver':forge_version}), 'forge-%(mc_ver)s-%(forge_ver)s.jar'%({'mc_ver':minecraft_version, 'forge_ver':forge_version})),
+                os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(forge_ver)s"%({'forge_ver':forge_version}), 'forge-%(forge_ver)s.jar'%({'forge_ver':forge_version}))
+                ]
+    forge_dl_urls=["https://files.minecraftforge.net/maven/net/minecraftforge/forge/%s/forge-%s-installer.jar"%(forge_version, forge_version),
+                    "https://files.minecraftforge.net/maven/net/minecraftforge/forge/%(mc_ver)s-%(forge_ver)s/forge-%(mc_ver)s-%(forge_ver)s-installer.jar"%({'mc_ver':minecraft_version, 'forge_ver':forge_version})
+                    ]
+    for forge_jar in forge_jar_paths:
+        if (os.path.isfile(forge_json) and os.path.isfile(forge_jar) ):
+            logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
+            return
 
-    if not (os.path.isfile(forge_json) and os.path.isfile(forge_jar) ):
-        logger.debug("Installing Minecraft Forge version: %s"%forge_version)
-        dirpath = tempfile.mkdtemp()
-        forge_installer=os.path.join(dirpath, "forge-%s-installer.jar"%forge_version)
-        with open(forge_installer, 'wb') as f:
-            f.write(download(forge_dl_url))
-            result = run(["java", "-jar", forge_installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            logger.debug("Forge Installer Exit Code:", result.returncode)
-            logger.debug(result.stdout.decode('UTF-8'))
-        shutil.rmtree(dirpath)
-        logger.debug('Forge %s installed'%forge_version)
-    else:
-        logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
+    logger.debug("Installing Minecraft Forge version: %s"%forge_version)
+    dirpath = tempfile.mkdtemp()
+    forge_installer=os.path.join(dirpath, "forge-%s-installer.jar"%forge_version)
+    forge_install_data=None
+    for forge_dl_url in forge_dl_urls:
+        try:
+            forge_install_data=download(forge_dl_url)
+        except:
+            continue
+    if not forge_install_data:
+        logger.error("Failed to download Forge Installer!")
+        exit(1)
+    with open(forge_installer, 'wb') as f:
+        f.write(forge_install_data)
+        result = run(["java", "-jar", forge_installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        logger.debug("Forge Installer Exit Code:", result.returncode)
+        logger.debug(result.stdout.decode('UTF-8'))
+    shutil.rmtree(dirpath)
+    logger.debug('Forge %s installed'%forge_version)
 
 def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     forge_version=modpack_info['forge']
@@ -221,8 +253,10 @@ def install_modpack(modpack, data_directory='', servername=''):
     config_dir=os.path.join(modpack_dir, "config")
     modpack_json=append_modDir(get_latest_json(url=modpack[1],file_location=os.path.join(modpack_dir, filename_from_url(modpack[1]))), mod_dir)
     processes=[]
+    minecraft_version, blah=extract_mc_forge_versions(modpack_json['forge'])
     forge_version=modpack_json['forge']
-    minecraft_version=forge_version[:forge_version.rfind('-')]
+    print(minecraft_version, forge_version)
+    input("Enter")
 
     install_minecraft(minecraft_version, minecraft_dir)
     install_forge(forge_version, minecraft_version, minecraft_dir)
@@ -411,7 +445,7 @@ if __name__ == "__main__":
         input("Press Enter to continue...")
         exit(1)
     #Editable Variables for installer
-    MANIFEST_URL = "http://relatedbygaming.ddns.net/files/rbgtest.manifest"
+    MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
     DATA_DIR_NAME=".%s"%SERVERNAME
 
     #No more configuration
@@ -425,7 +459,7 @@ if __name__ == "__main__":
         os.mkdir(data_directory)
 
     #Initializeing Logger
-    logger = logging.getLogger('Modpack_Manager')#logging.basicConfig(filename=os.path.join(data_directory, 'modpack-manager.log'), level=logging.DEBUG)
+    logger = logging.getLogger('Modpack_Manager')
     logger.setLevel(logging.DEBUG)
     fh = logging.FileHandler(os.path.join(data_directory, 'modpack-manager.log'))
     fh.setLevel(logging.DEBUG)
@@ -486,6 +520,7 @@ if __name__ == "__main__":
         manifest = update_manifest(manifest_url=MANIFEST_URL, data_dir=data_directory, manifest_filename=manifest_filename)
     except :
         logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
+        input("Please contact an Administrator for help. Press Enter to continue.")
     if not manifest:
         logger.debug("Failed to download manifest from %s"%MANIFEST_URL)
         exit(1)
