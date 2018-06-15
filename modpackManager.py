@@ -194,7 +194,7 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
                         'created':timestamp,
                         'lastUsed':timestamp,
                         "lastVersionId":"%s-forge%s"%(minecraft_version, forge_version),
-                        'gameDir':data_directory}
+                        'gameDir':modpack_dir}
 
     profile['profiles'].pop(modpack_name, None)
     profile['profiles'][modpack_name]=modpack_profile
