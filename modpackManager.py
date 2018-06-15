@@ -188,6 +188,7 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     profile = open_json(profile_json)
     timestamp=datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%S.000Z')
     modpack_name=modpack_info['modpack_name']
+    modpack_dir=os.path.join(data_directory, modpack_name)
     modpack_profile = {'name':modpack_info['modpack_name'],
                         'type':'custom',
                         'created':timestamp,
