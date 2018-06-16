@@ -113,7 +113,8 @@ def remove_old_mods(modlist, mod_dir):
         if os.path.isfile(modfile):
             keep=False
             for mod in modlist:
-                if file == mod_filename(mod[0], mod[1]):
+                if file == mod_filename(mod['name'], mod['version']):
+                    logger.info("Match found! %s still in modpack."%file)
                     keep=True
                     break
             if not keep:
@@ -215,22 +216,32 @@ def install_forge(forge_version, minecraft_version, mc_dir):
 
 def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     forge_version=modpack_info['forge']
-    minecraft_version=forge_version[:forge_version.rfind('-')]
+    minecraft_version, bleh=extract_mc_forge_versions(forge_version)
     profile_json=os.path.join(minecraft_dir, "launcher_profiles.json")
     profile = open_json(profile_json)
     timestamp=datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%S.000Z')
     modpack_name=modpack_info['modpack_name']
     modpack_dir=os.path.join(data_directory, modpack_name)
+    forge_ver_dir=os.path.join(minecraft_dir, 'versions', minecraft_version+'-forge'+forge_version)
+    forge=''
+    if not os.path.isdir(forge_ver_dir):
+        logger.error("Forge was not installed!")
+        exit(1)
+    else:
+        for f in os.listdir(forge_ver_dir):
+            if os.path.isfile(os.path.join(forge_ver_dir, f)):
+                forge, ext = os.path.splitext(f)
+
     modpack_profile = {'name':modpack_info['modpack_name'],
                         'type':'custom',
                         'created':timestamp,
                         'lastUsed':timestamp,
-                        "lastVersionId":"%s-forge%s"%(minecraft_version, forge_version),
+                        "lastVersionId":"%s"%str(forge),
                         'gameDir':modpack_dir}
-
     profile['profiles'].pop(modpack_name, None)
     profile['profiles'][modpack_name]=modpack_profile
     logger.info("Installed profile for %s"%modpack_name)
+    logger.debug("Installed %s"%str(modpack_profile))
     save_json(profile_json, profile)
     #Servers.dat file section
     server_dat_file=os.path.join(data_directory, modpack_name, "servers.dat")
@@ -255,8 +266,6 @@ def install_modpack(modpack, data_directory='', servername=''):
     processes=[]
     minecraft_version, blah=extract_mc_forge_versions(modpack_json['forge'])
     forge_version=modpack_json['forge']
-    print(minecraft_version, forge_version)
-    input("Enter")
 
     install_minecraft(minecraft_version, minecraft_dir)
     install_forge(forge_version, minecraft_version, minecraft_dir)
@@ -288,7 +297,7 @@ def update_modpack(modpack, data_directory, servername):
     mod_dir=os.path.join(modpack_dir, "mods")
     config_dir=os.path.join(modpack_dir, "config")
     latest_json=download_json(modpack[1])
-    remove_old_mods(latest_json, mod_dir)
+    remove_old_mods(latest_json['modlist'], mod_dir)
     if os.path.isdir(config_dir):
         shutil.rmtree(config_dir)
     install_modpack(modpack, data_directory, servername)
@@ -365,7 +374,6 @@ def schedule(data_dir):
 def unschedule():
     logger.debug("Unscheduling AutoUpdate")
     if os.name == 'nt':
-        print(SERVERNAME)
         result = run(['schtasks.exe', '/QUERY', '/TN', '%s_Modpack_Manager'%SERVERNAME], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if not result.returncode:
             logger.debug("Removing scheduled task")
