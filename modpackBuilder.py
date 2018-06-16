@@ -147,6 +147,9 @@ class ModpackBuilder(Frame):
         self.text_config.delete('1.0', END)
         self.text_config.insert('end', file_data['config_link'])
 
+        self.text_server.delete('1.0', END)
+        self.text_server.insert('end', file_data['server_address'])
+
         self.text_forge.delete('1.0', END)
         self.text_forge.insert('end', file_data['forge'])
 
