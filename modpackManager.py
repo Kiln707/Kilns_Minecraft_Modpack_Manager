@@ -237,6 +237,7 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
                         'created':timestamp,
                         'lastUsed':timestamp,
                         "lastVersionId":"%s"%str(forge),
+                        'javaArgs': "-Xmx4G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=16M",
                         'gameDir':modpack_dir}
     profile['profiles'].pop(modpack_name, None)
     profile['profiles'][modpack_name]=modpack_profile
