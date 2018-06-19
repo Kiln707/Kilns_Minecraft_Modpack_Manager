@@ -130,12 +130,13 @@ def make_server_directory(dir_path):
 
 def extract_mc_forge_versions(forge_version):
     versions = split_versions(forge_version)
-    mc1_ver='\d*.\d*.\d*'
-    mc2_ver='\d*.\d*'
-    if re.match('\d*.\d*.\d*.\d*', versions[0]):
+    mc1_ver=r'^\d*[.]\d*[.]\d*'
+    mc2_ver=r'^\d*[.]\d*'
+    if re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[0]):
+        print(re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[0]), versions[0])
         if re.match(mc1_ver, versions[1]) or re.match(mc2_ver, versions[1]):
             return versions[1], versions[0]
-    elif re.match('\d*.\d*.\d*.\d*', versions[1]):
+    elif re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[1]):
         if re.match(mc1_ver, versions[0]) or re.match(mc2_ver, versions[0]):
             return versions[0], versions[1]
     return None, None
@@ -201,6 +202,8 @@ def install_forge(forge_version, minecraft_version, mc_dir):
     for forge_dl_url in forge_dl_urls:
         try:
             forge_install_data=download(forge_dl_url)
+            if forge_install_data:
+                break
         except:
             continue
     if not forge_install_data:
@@ -224,13 +227,13 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     modpack_dir=os.path.join(data_directory, modpack_name)
     forge_ver_dir=os.path.join(minecraft_dir, 'versions', minecraft_version+'-forge'+forge_version)
     forge=''
-    if not os.path.isdir(forge_ver_dir):
-        logger.error("Forge was not installed!")
-        exit(1)
-    else:
-        for f in os.listdir(forge_ver_dir):
-            if os.path.isfile(os.path.join(forge_ver_dir, f)):
-                forge, ext = os.path.splitext(f)
+    # if not os.path.isdir(forge_ver_dir):
+    #     logger.error("Forge was not installed!")
+    #     exit(1)
+    # else:
+    for f in os.listdir(forge_ver_dir):
+        if os.path.isfile(os.path.join(forge_ver_dir, f)):
+            forge, ext = os.path.splitext(f)
 
     modpack_profile = {'name':modpack_info['modpack_name'],
                         'type':'custom',
