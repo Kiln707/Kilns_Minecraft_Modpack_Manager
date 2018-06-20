@@ -335,7 +335,7 @@ def update_manifest(manifest_url, data_dir, manifest_filename):
         if update_available(latest_manifest, current_manifest):
             logger.info("Update is available, Updating modpacks!")
             save_json(manifest_filename, latest_manifest)
-            remove_old_modpacks(manifest, data_dir)
+            remove_old_modpacks(latest_manifest, data_dir)
     else:
         save_json(manifest_filename, latest_manifest)
     for modpack in latest_manifest['modlist']:
