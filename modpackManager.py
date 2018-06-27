@@ -300,10 +300,23 @@ def update_modpack(modpack, data_directory, servername):
     modpack_dir=make_modpack_directories(modpack[0], data_directory)
     mod_dir=os.path.join(modpack_dir, "mods")
     config_dir=os.path.join(modpack_dir, "config")
+    json_filename=os.path.join(modpack_dir, str(filename_from_url(modpack[1])))
     latest_json=download_json(modpack[1])
-    remove_old_mods(latest_json['modlist'], mod_dir)
-    if os.path.isdir(config_dir):
-        shutil.rmtree(config_dir)
+    current_json=None
+    if os.path.isfile(json_filename):
+        current_json = open_json(json_filename)
+    if current_json:
+        if update_available(latest_json, current_json):
+            logger.info("Update is available for %s"%modpack[0])
+            remove_old_mods(latest_json['modlist'], mod_dir)
+            if os.path.isdir(config_dir):
+                shutil.rmtree(config_dir)
+        else:
+            logger.info("No update available for %s"%modpack[0])
+            return
+    else:
+        logger.info("%s not installed. Installing."%modpack[0])
+        save_json(json_filename, latest_json)
     install_modpack(modpack, data_directory, servername)
 
 def uninstall_modpack(modpack_info, data_dir):
