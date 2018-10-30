@@ -466,7 +466,7 @@ if __name__ == "__main__":
     SERVERNAME='RelatedbyGaming'
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     if not os.path.isdir(minecraft_dir):
-        logger.debug("ERROR! Please run Minecraft launcher before installing.")
+        print("ERROR! Please run Minecraft launcher before installing.")
         input("Press Enter to continue...")
         exit(1)
     #Editable Variables for installer
