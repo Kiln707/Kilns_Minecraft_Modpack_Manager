@@ -1,1 +1,1 @@
-python modpackManager.py
+python modpackInstaller.py

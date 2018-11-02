@@ -9,19 +9,40 @@ from sys import exit
 from tkinter import *
 from zipfile import ZipFile
 import urllib.request as request
+from urllib.parse import quote, urlparse
+import validators
+from urllib.error import HTTPError
 import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys, tempfile, time, traceback
+
+def correct_url(url):
+    if url.startswith('http://'):
+        return 'http://'+quote(url[7:])
+    if url.startswith('https://'):
+        return 'https://'+quote(url[8:])
+    return quote(url)
+
+def is_valid_url(url):
+    return validators.url(url)
 
 def download(url=None):
     if not url:
         logger.debug('No URL')
         return None
+
+    if not is_valid_url(url):
+        url=correct_url(url)
+
     if not ( url.startswith('http://') or url.startswith('https://') ):
         url='http://'+url
     try:
         logger.debug('Downloading from %s'%url)
         response = request.urlopen(url)
         return response.read()
-    except:
+    except HTTPError as e:
+        print(e.code)
+        print(e.read())
+    except Exception as e:
+        print(type(e))
         return None
 
 def filename_from_url(url=None):
@@ -128,6 +149,13 @@ def make_server_directory(dir_path):
     if not os.path.isdir(dir_path):
         os.mkdir(dir_path)
 
+def is_java_installed():
+    try:
+        subprocess.call(["java","-version"])
+    except FileNotFoundError as e:
+        return False
+    return True
+
 def extract_mc_forge_versions(forge_version):
     versions = split_versions(forge_version)
     mc1_ver=r'^\d*[.]\d*[.]\d*'
@@ -140,7 +168,6 @@ def extract_mc_forge_versions(forge_version):
         if re.match(mc1_ver, versions[0]) or re.match(mc2_ver, versions[0]):
             return versions[0], versions[1]
     return None, None
-
 
 def make_modpack_directories(modpack, data_directory=''):
     if not os.path.isdir(os.path.join(data_directory, modpack)):
@@ -202,13 +229,14 @@ def install_forge(forge_version, minecraft_version, mc_dir):
     for forge_dl_url in forge_dl_urls:
         try:
             forge_install_data=download(forge_dl_url)
+            print(forge_install_data)
             if forge_install_data:
                 break
         except:
             continue
     if not forge_install_data:
         logger.error("Failed to download Forge Installer!")
-        exit(1)
+        exit(1) #   <------------------------------------------------------------------ FIX THIS!!!!
     with open(forge_installer, 'wb') as f:
         f.write(forge_install_data)
         result = run(["java", "-jar", forge_installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -454,6 +482,9 @@ def run_installer():
     logger.debug("Quiet installation")
     return ''
 
+def Mbox(title, text, style):
+    return ctypes.windll.user32.MessageBoxW(0, text, title, style)
+
 if __name__ == "__main__":
     quiet=False
     action='install'
@@ -466,9 +497,14 @@ if __name__ == "__main__":
     SERVERNAME='RelatedbyGaming'
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     if not os.path.isdir(minecraft_dir):
-        print("ERROR! Please run Minecraft launcher before installing.")
-        input("Press Enter to continue...")
+        print("ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
+        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.", 1)
         exit(1)
+    if not is_java_installed():
+        print("ERROR! Install Java from https://www.java.com/en/download/")
+        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nInstall Java from https://www.java.com/en/download/", 1)
+        exit(1)
+
     #Editable Variables for installer
     MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
     DATA_DIR_NAME=".%s"%SERVERNAME
@@ -510,7 +546,13 @@ if __name__ == "__main__":
         if os.name == 'nt':
             if not is_admin():
                 logger.debug("Restarting as Administrator")
-                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet", '', 6)
+                result = 0
+                if sys.argv[0].endswith('.py'):
+                    print("python")
+                    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "python", sys.argv[0]+" quiet", '', 6)
+                else:
+                    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet", '', 6)
+
                 if not result>32:
                     logger.error("Failed to install modpack Manager")
                     exit(1)
