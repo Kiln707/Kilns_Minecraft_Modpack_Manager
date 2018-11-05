@@ -537,6 +537,7 @@ if __name__ == "__main__":
 
     logger.debug("Arguments %s"%sys.argv)
 
+    #This will only show the GUI to install, update, or uninstall
     if ( not quiet and not is_admin()):
         logger.info("Running GUI Installer")
         action = run_installer()
@@ -544,14 +545,16 @@ if __name__ == "__main__":
     if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
         logger.info("Running Modpack Manager Installation.")
         if os.name == 'nt':
+            logger.debug(is_admin())
             if not is_admin():
                 logger.debug("Restarting as Administrator")
                 result = 0
-                if sys.argv[0].endswith('.py'):
-                    print("python")
-                    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "python", sys.argv[0]+" quiet", '', 6)
-                else:
-                    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet", '', 6)
+                #if sys.argv[0].endswith('.py'):
+                #    logger.debug('Python')
+                #    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "python", sys.argv[0]+" quiet", '', 6)
+                #else:
+                logger.debug('EXE')
+                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet", '', 6)
 
                 if not result>32:
                     logger.error("Failed to install modpack Manager")

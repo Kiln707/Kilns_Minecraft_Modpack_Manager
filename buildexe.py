@@ -2,7 +2,7 @@ import os, shutil
 
 
 if __name__ == "__main__":
-    debug=False
+    debug=True
 
     pwd = os.getcwd()
     if pwd != os.path.dirname(os.path.realpath(__file__)):
