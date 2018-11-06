@@ -1,1 +1,2 @@
 python buildexe.py
+pause

@@ -19,18 +19,12 @@ if __name__ == "__main__":
     if os.path.isdir(dist):
         os.system("RMDIR /S /Q %s"%dist)
 
-    #Create working directories
-    if os.path.isdir(build):
-        os.path.mkdir(build)
-    if os.path.isdir(dist):
-        os.path.mkdir(dist)
-
     req=os.path.join(cwd, "requirements.txt")
     os.system("pip install -r %s"%req)
 
     if debug:
-        os.system("pyinstaller --onefile --icon=rbg_mc.ico -F modpackInstaller.py")
-        os.system("pyinstaller --onefile --icon=rbg_mc.ico -F modpackBuilder.py")
+        os.system("pyinstaller --win-private-assemblies --icon=rbg_mc.ico -F modpackInstaller.py")
+        os.system("pyinstaller --icon=rbg_mc.ico -F modpackBuilder.py")
     else:
         os.system("pyinstaller --onefile --noconsole --icon=rbg_mc.ico -F modpackInstaller.py")
         os.system("pyinstaller --onefile --noconsole --icon=rbg_mc.ico -F modpackBuilder.py")

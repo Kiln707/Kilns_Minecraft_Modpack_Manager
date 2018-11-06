@@ -11,7 +11,7 @@ from zipfile import ZipFile
 import urllib.request as request
 from urllib.parse import quote, urlparse
 import validators
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys, tempfile, time, traceback
 
 def correct_url(url):
@@ -41,9 +41,11 @@ def download(url=None):
     except HTTPError as e:
         print(e.code)
         print(e.read())
+    except URLError as e:
+        print(e.read().decode("utf8", 'ignore'))
     except Exception as e:
         print(type(e))
-        return None
+    return None
 
 def filename_from_url(url=None):
     if url:
@@ -93,6 +95,10 @@ def open_json(file_location=None):
 def mod_filename(modname, modversion):
     return "%s-%s.jar"%(modname,modversion)
 
+def split_mod_filename(filename):
+    name=filename.split('.')
+    return (name[0].split('-'))
+
 def get_latest_json(url=None, file_location=None):
     latest_json = download_json(url)
     if latest_json:
@@ -110,6 +116,39 @@ def update_available(latest, current):
     if current:
         return float(latest['version']) > float(current['version'])
     return True
+
+def files_in_dir(path):
+    for file in os.listdir(path):
+        if os.path.isfile(os.path.join(path, file)):
+            yield file
+
+###################
+#   Modpack Sections
+###################
+def modpack_isInstalled(modpack, data_dir):
+    return os.path.isfile(os.path.join(data_dir, modpack[0], filename_from_url(modpack[1])))
+
+def download_modpack_manifest(url):
+    return download_json(url)
+
+def get_current_modpack_manifest(manifest_filename):
+    current_manifest=None
+    if os.path.isfile(manifest_filename):
+        current_manifest=open_json(manifest_filename)
+    return current_manifest
+
+def remove_old_mods(latest_modlist, mod_dir):
+    for file in files_in_dir(mod_dir):
+
+
+
+
+def update_modpack(latest_json, current_json, data_directory):
+
+
+
+
+
 
 def remove_old_modpacks(manifest, data_dir):
     installed_modpacks=[ item for item in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, item)) ]
@@ -141,9 +180,6 @@ def remove_old_mods(modlist, mod_dir):
             if not keep:
                 logger.info("Removing %s, no longer in modpack"%file)
                 os.remove(modfile)
-
-def modpack_isInstalled(modpack, data_dir):
-    return os.path.isfile(os.path.join(data_dir, modpack[0], filename_from_url(modpack[1])))
 
 def make_server_directory(dir_path):
     if not os.path.isdir(dir_path):
@@ -228,11 +264,13 @@ def install_forge(forge_version, minecraft_version, mc_dir):
     forge_install_data=None
     for forge_dl_url in forge_dl_urls:
         try:
+            logger.debug("Attempting to download forge %s at %s"%(forge_version, forge_dl_urls))
             forge_install_data=download(forge_dl_url)
             print(forge_install_data)
             if forge_install_data:
                 break
-        except:
+        except Exception as e:
+            print(e)
             continue
     if not forge_install_data:
         logger.error("Failed to download Forge Installer!")
@@ -289,6 +327,11 @@ def append_modDir(modpack_json, mod_dir):
         modinfo['dir']=mod_dir
     return modpack_json
 
+def install_modpack(modpack, data_directory):
+    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
+
+    pass
+
 def install_modpack(modpack, data_directory='', servername=''):
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     modpack_dir=make_modpack_directories(modpack[0], data_directory)
@@ -322,7 +365,10 @@ def install_modpack(modpack, data_directory='', servername=''):
     # for process in processes:
     #     process.join()
 
-def update_modpack(modpack, data_directory, servername):
+#
+#   DEPRECIATED
+#
+def depreciated_update_modpack(modpack, data_directory, servername):
     logger.info('Updating modpack %s'%modpack[0])
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
     modpack_dir=make_modpack_directories(modpack[0], data_directory)
@@ -367,6 +413,14 @@ def uninstall_manifest(manifest_filename, data_dir):
         for modpack in manifest['modlist']:
             uninstall_modpack(modpack, data_dir)
 
+def get_latest_manifest(manifest_url):
+    return download_json(manifest_url)
+
+
+
+##
+#   DEPRECIATED !
+##
 def update_manifest(manifest_url, data_dir, manifest_filename):
     latest_manifest=download_json(manifest_url)
     current_manifest=None
@@ -386,6 +440,8 @@ def update_manifest(manifest_url, data_dir, manifest_filename):
             make_modpack_directories(modpack[0], data_directory=data_dir)
             install_modpack(modpack, data_dir, latest_manifest['server'])
     return latest_manifest
+
+
 
 def is_admin():
     if os.name=='nt':
@@ -439,6 +495,7 @@ def copy_program(data_dir):
         with open(sys.argv[0],"rb") as o:
             logger.debug("Opened %s for reading"% sys.argv[0])
             f.write(o.read())
+    logger.debug("Finished copying program")
 
 class Installer(Frame):
     def __init__(self, data_dir, server):
@@ -485,44 +542,10 @@ def run_installer():
 def Mbox(title, text, style):
     return ctypes.windll.user32.MessageBoxW(0, text, title, style)
 
-if __name__ == "__main__":
-    quiet=False
-    action='install'
-    if len(sys.argv) > 1 and sys.argv[1] == 'quiet':
-        quiet=True
-    if len(sys.argv) > 2:
-        action=sys.argv[2]
-
-    #os.path.join(os.path.dirname(os.path.realpath(__file__)), __file__.strip('.\/'))
-    SERVERNAME='RelatedbyGaming'
-    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
-    if not os.path.isdir(minecraft_dir):
-        print("ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
-        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.", 1)
-        exit(1)
-    if not is_java_installed():
-        print("ERROR! Install Java from https://www.java.com/en/download/")
-        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nInstall Java from https://www.java.com/en/download/", 1)
-        exit(1)
-
-    #Editable Variables for installer
-    MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
-    DATA_DIR_NAME=".%s"%SERVERNAME
-
-    #No more configuration
-    data_directory=''
-    if os.name =='nt':
-        data_directory=os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
-    else:
-        data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
-
-    if not os.path.isdir(data_directory):
-        os.mkdir(data_directory)
-
-    #Initializeing Logger
+def initilize_logger(directory):
     logger = logging.getLogger('Modpack_Manager')
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler(os.path.join(data_directory, 'modpack-manager.log'))
+    fh = logging.FileHandler(os.path.join(directory, 'modpack-manager.log'))
     fh.setLevel(logging.DEBUG)
 
     ch = logging.StreamHandler()
@@ -534,63 +557,150 @@ if __name__ == "__main__":
     logger.addHandler(ch)
 
     logger.debug("Logger Initialized")
+    return logger
 
+def minecraft_req_met():
+    return os.path.isdir(minecraft_dir)
+
+def set_data_directory_path(directory_name):
+    data_directory=''
+    if os.name =='nt':
+        data_directory=os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
+    else:
+        data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
+    return data_directory
+
+
+
+def restart_as_admin(action):
+    result = 0
+    if sys.argv[0].endswith('.py'):
+        logger.debug('Python')
+        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "python", sys.argv[0]+" quiet %s"%action, '', 6)
+    else:
+        logger.debug('EXE')
+        result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet %s"%action, '', 6)
+    if not result>32:
+        logger.error("Failed to run as administrator")
+        return False
+    return True
+
+if __name__ == "__main__":
+    quiet=False
+    action=''
+    if len(sys.argv) > 1 and sys.argv[1] == 'quiet':
+        quiet=True
+    if len(sys.argv) > 2:
+        action=sys.argv[2]
+
+
+    #Editable Variables for installer
+    SERVERNAME='RelatedbyGaming'
+    MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
+
+    #DO NOT EDIT THESE VARIABLES
+    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
+    DATA_DIR_NAME=".%s"%SERVERNAME
+    data_directory = set_data_directory_path(DATA_DIR_NAME)
+    make_server_directory(data_directory)
+    #Initializeing Logger
+    logger = initilize_logger(data_directory)
+
+    if not minecraft_req_met():
+        logger.error("ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
+        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.", 1)
+        exit(1)
+    if not is_java_installed():
+        logger.error("ERROR! Install Java from https://www.java.com/en/download/")
+        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nInstall Java from https://www.java.com/en/download/", 1)
+        exit(1)
+
+    #No more configuration
     logger.debug("Arguments %s"%sys.argv)
 
     #This will only show the GUI to install, update, or uninstall
-    if ( not quiet and not is_admin()):
-        logger.info("Running GUI Installer")
-        action = run_installer()
+    logger.info("Running GUI Installer")
+    action = run_installer()
 
     if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
         logger.info("Running Modpack Manager Installation.")
         if os.name == 'nt':
             logger.debug(is_admin())
             if not is_admin():
-                logger.debug("Restarting as Administrator")
-                result = 0
-                #if sys.argv[0].endswith('.py'):
-                #    logger.debug('Python')
-                #    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", "python", sys.argv[0]+" quiet", '', 6)
-                #else:
-                logger.debug('EXE')
-                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], "quiet", '', 6)
-
-                if not result>32:
-                    logger.error("Failed to install modpack Manager")
+                copy_program(data_directory)
+                logger.debug("Restarting as Administrator to schedule auto-update")
+                if not restart_as_admin('install'):
+                    logger.error("Failed to schedule")
+                    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to schedule auto-update", 1)
                     exit(1)
             else:
                 try:
-                    make_server_directory(data_directory)
-                    copy_program(data_directory)
                     schedule(data_directory)
                 except:
                     logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
+                    exit(1)
                 exit(0)
-        logging.debug("Finished installing")
+        logging.debug("Finished installing initial setup")
     elif action == 'uninstall':
         if os.name == 'nt':
             if not is_admin():
                 logger.debug("Restarting as Administrator")
-                result = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.argv[0], 'quiet uninstall', '', 6)
-            else:
-                logger.info("Running Modpack Manager uninstall")
-                unschedule()
+                if not restart_as_admin('uninstall'):
+                    logging.error('Failed to uninstall')
+                    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to remove schedule", 1)
+                    exit(1)
                 uninstall_manifest(os.path.join(data_directory, str(filename_from_url(MANIFEST_URL))), data_directory)
                 logging.shutdown()
                 shutil.rmtree(data_directory)
+            else:
+                logger.info("Running Modpack Manager uninstall")
+                try:
+                    unschedule()
+                except:
+                    logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
+                    exit(1)
         exit(0)
     elif action == 'cancel':
         logger.info("User cancelled operation")
         exit(0)
+
+    #TODO, RUN MODPACK MANIPULATIONS HERE FOR MULTI_THREAD
+
+
+
     logger.info("Updating/Installing Modpacks")
     manifest_filename=os.path.join(data_directory, str(filename_from_url(MANIFEST_URL)))
     manifest = None
     try:
-        manifest = update_manifest(manifest_url=MANIFEST_URL, data_dir=data_directory, manifest_filename=manifest_filename)
+        # Download Latest manifest. Install/update modpacks
+        latest_manifest = get_latest_manifest(MANIFEST_URL)
+        for modpack in latest_manifest['modlist']:
+            #
+            #Install Modpack Section
+            #
+            modpack_dir = make_modpack_directories(modpack[0], data_directory=data_directory)
+            latest_modpack_manifest = download_modpack_manifest(modpack[1])
+            current_modpack_manifest= get_current_modpack_manifest(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))))
+            if current_modpack_manifest and update_available(latest_modpack_manifest, current_modpack_manifest):
+                update_modpack(latest_modpack_manifest, current_modpack_manifest, modpack_dir)
+            validate_modpack(latest_modpack_manifest, modpack_dir)
+            if current_modpack_manifest and update_available(latest_modpack_manifest, current_modpack_manifest):
+                save_json(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))), latest_modpack_manifest)
+        #
+        # Save Manifest for uninstallation purposes
+        #
+        current_manifest=None
+        if os.path.isfile(manifest_filename):
+            current_manifest=open_json(manifest_filename)
+        if current_manifest:
+            if update_available(latest_manifest, current_manifest):
+                save_json(manifest_filename, latest_manifest)
+        else:
+            save_json(manifest_filename, latest_manifest)
     except :
         logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
         input("Please contact an Administrator for help. Press Enter to continue.")
+        exit(1)
     if not manifest:
         logger.debug("Failed to download manifest from %s"%MANIFEST_URL)
         exit(1)
