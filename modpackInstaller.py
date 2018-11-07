@@ -14,6 +14,9 @@ import validators
 from urllib.error import HTTPError, URLError
 import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys, tempfile, time, traceback
 
+#####
+#   helpers and Checkers
+#####
 def correct_url(url):
     if url.startswith('http://'):
         return 'http://'+quote(url[7:])
@@ -24,14 +27,32 @@ def correct_url(url):
 def is_valid_url(url):
     return validators.url(url)
 
+def split_versions(version=''):
+    if version:
+        pos = str(version).rfind('-')
+        return ( str(version)[:int(pos)], str(version)[int(pos+1):])
+
+def update_available(latest, current):
+    if current:
+        return float(latest['version']) > float(current['version'])
+    return True
+
+def is_java_installed():
+    try:
+        subprocess.call(["java","-version"])
+    except FileNotFoundError as e:
+        return False
+    return True
+
+#####
+#   File MANIPULATIONS
+#####
 def download(url=None):
     if not url:
         logger.debug('No URL')
         return None
-
     if not is_valid_url(url):
         url=correct_url(url)
-
     if not ( url.startswith('http://') or url.startswith('https://') ):
         url='http://'+url
     try:
@@ -57,10 +78,14 @@ def filename_from_path(path=None):
         pos=str(path).rfind('\\')+1
         return str(path)[int(pos):]
 
-def split_versions(version=''):
-    if version:
-        pos = str(version).rfind('-')
-        return ( str(version)[:int(pos)], str(version)[int(pos+1):])
+def files_in_dir(path):
+    for file in os.listdir(path):
+        if os.path.isfile(os.path.join(path, file)):
+            yield file
+
+def remove_file(filename):
+    if os.path.isfile(filename):
+        os.remove(filename)
 
 def downloadExtact_zip(dir, url=''):
     logger.debug("Downloading zipfile from %s"%url)
@@ -78,6 +103,20 @@ def download_file(url, filename):
     with open(filename, "wb+") as f:
         f.write(download(url))
 
+def download_file_size(url):
+    site = urllib.urlopen(link)
+    meta = site.info()
+    return int(meta.getheaders("Content-Length")[0])
+
+def get_file_size(filename):
+    if os.path.isfile(filename):
+        return os.path.getsize(filename)
+    return 0
+
+def save_file(file_location, data):
+    with open(file_location, 'w+') as file:
+        file.write(forge_install_data)
+
 def save_json(file_location=None, data=None):
     if file_location and data:
         logger.debug("Writing json file at %s"%file_location)
@@ -92,13 +131,13 @@ def open_json(file_location=None):
         return data
     return None
 
-def mod_filename(modname, modversion):
-    return "%s-%s.jar"%(modname,modversion)
+def make_directory(dir_path):
+    if not os.path.isdir(dir_path):
+        os.mkdir(dir_path)
 
-def split_mod_filename(filename):
-    name=filename.split('.')
-    return (name[0].split('-'))
-
+#
+#   DEPRECIATED
+#
 def get_latest_json(url=None, file_location=None):
     latest_json = download_json(url)
     if latest_json:
@@ -112,15 +151,118 @@ def get_latest_json(url=None, file_location=None):
     else:
         return None
 
-def update_available(latest, current):
-    if current:
-        return float(latest['version']) > float(current['version'])
-    return True
+#####
+#   Mod MANIPULATIONS
+#####
+def mod_filename(modname, modversion):
+    return "%s-%s.jar"%(modname,modversion)
 
-def files_in_dir(path):
-    for file in os.listdir(path):
-        if os.path.isfile(os.path.join(path, file)):
-            yield file
+def split_mod_filename(filename):
+    name=filename.split('.')
+    return (name[0].split('-'))
+
+def validate_mod_file(mod_dir, mod):
+    modfile=os.path.join(mod_dir, mod_filename(mod['name'],mod['version']))
+    if download_file_size(mod['download']) != get_file_size(modfile):
+        remove_file(modfile)
+        download_mod(mod_dir, mod)
+
+def download_mod(mod_dir, mod_data):
+    filename=os.path.join(mod_dir, mod_filename(mod_data['name'],mod_data['version']))
+    if not os.path.isfile(filename):
+        download_file(url=mod_data['download'], filename=filename)
+        logger.debug("Downloaded %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
+    else:
+        logger.debug("%s Version: %s, is already installed"%(mod_data['name'],mod_data['version']))
+
+###################
+#   Minecraft Section
+###################
+def install_minecraft(minecraft_version, mc_dir):
+    mc_version_dir=os.path.join(mc_dir, 'versions', minecraft_version)
+    minecraft_manifest_url="https://launchermeta.mojang.com/mc/game/version_manifest.json"
+
+    if not os.path.isdir(mc_version_dir):
+        os.makedirs(mc_version_dir)
+    for version in download_json(minecraft_manifest_url)['versions']:
+        if str(version['id']) == str(minecraft_version):
+            if not ( os.path.isfile(os.path.join(mc_version_dir, filename_from_url(version['url']))) and os.path.isfile(os.path.join(mc_version_dir, "%s.jar"%minecraft_version)) ):
+                logger.debug("Downloading Minecraft %s"%minecraft_version)
+                save_json(os.path.join(mc_version_dir, filename_from_url(version['url'])), download_json(version['url']))
+                version_json = open_json(os.path.join(mc_version_dir, filename_from_url(version['url'])))
+                with open(os.path.join(mc_version_dir, "%s.jar"%minecraft_version), 'wb') as f:
+                    f.write(download(version_json['downloads']['client']['url']))
+                logger.debug('Minecraft Version: %s Installation Complete'%minecraft_version)
+            else:
+                logger.debug('Minecraft Version: %s already installed'%minecraft_version)
+###################
+#   Forge Section
+###################
+def extract_mc_forge_versions(forge_version):
+    versions = split_versions(forge_version)
+    mc1_ver=r'^\d*[.]\d*[.]\d*'
+    mc2_ver=r'^\d*[.]\d*'
+    if re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[0]):
+        print(re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[0]), versions[0])
+        if re.match(mc1_ver, versions[1]) or re.match(mc2_ver, versions[1]):
+            return versions[1], versions[0]
+    elif re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[1]):
+        if re.match(mc1_ver, versions[0]) or re.match(mc2_ver, versions[0]):
+            return versions[0], versions[1]
+    return None, None
+
+def is_forge_installed(forge_ver, minecraft_ver, mc_dir):
+    forge_jar_paths=[os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(mc_ver)s-%(forge_ver)s"%({'mc_ver':minecraft_version, 'forge_ver':forge_version}), 'forge-%(mc_ver)s-%(forge_ver)s.jar'%({'mc_ver':minecraft_version, 'forge_ver':forge_version})),
+                    os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(forge_ver)s"%({'forge_ver':forge_version}), 'forge-%(forge_ver)s.jar'%({'forge_ver':forge_version}))
+                    ]
+    for forge_jar in forge_jar_paths:
+        if (os.path.isfile(forge_json) and os.path.isfile(forge_jar) ):
+            return True
+    return False
+
+def download_forge(forge_version, minecraft_version):
+    forge_dl_urls=["https://files.minecraftforge.net/maven/net/minecraftforge/forge/%s/forge-%s-installer.jar"%(forge_version, forge_version),
+                    "https://files.minecraftforge.net/maven/net/minecraftforge/forge/%(mc_ver)s-%(forge_ver)s/forge-%(mc_ver)s-%(forge_ver)s-installer.jar"%({'mc_ver':minecraft_version, 'forge_ver':forge_version})
+                    ]
+    forge_install_data=None
+    for forge_dl_url in forge_dl_urls:
+        try:
+            logger.debug("Attempting to download forge %s Installer at %s"%(forge_version, forge_dl_urls))
+            forge_install_data=download(forge_dl_url)
+            if forge_install_data:
+                return forge_install_data
+        except Exception as e:
+            print(e)
+            continue
+    logger.error("Failed to download Forge Installer!")
+    return None
+
+def get_forge_installer(forge_version, minecraft_version, dir):
+    forge_installer=os.path.join(dir, "forge-%s-installer.jar"%forge_version)
+    forge_installer_data = download_forge(forge_version, minecraft_version)
+    if forge_installer_data:
+        save_file(forge_installer, forge_installer_data)
+        return forge_installer
+    return None
+
+def install_forge(forge_version, minecraft_version, mc_dir):
+    if is_forge_installed(forge_version, minecraft_version, mcdir):
+        logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
+        return  True
+    logger.debug("Installing Minecraft Forge version: %s"%forge_version)
+    dirpath = tempfile.mkdtemp()
+    installer = get_forge_installer(forge_version, minecraft_version, dirpath)
+    success=False
+    if installer:
+        result = run(["java", "-jar", forge_installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        logger.debug("Forge Installer Exit Code:", result.returncode)
+        logger.debug(result.stdout.decode('UTF-8'))
+        success=True
+    shutil.rmtree(dirpath)
+    if success
+        logger.debug('Forge %s installed'%forge_version)
+        return True
+    logger.error('Failed to install Forge %s'%forge_version)
 
 ###################
 #   Modpack Sections
@@ -139,17 +281,33 @@ def get_current_modpack_manifest(manifest_filename):
 
 def remove_old_mods(latest_modlist, mod_dir):
     for file in files_in_dir(mod_dir):
+        splitname=split_mod_filename(file)
+        remove=True
+        for mod in latest_modlist:
+            if mod['name'] == splitname[0] and mod['version'] == splitname[1]:
+                remove=False
+                break
+        remove_file(os.path.join(mod_dir, file))
 
-
-
+def install_mods(mod_dir, mod_list):
+    for mod in modlist:
+        download_mod(mod_dir, mod)
 
 def update_modpack(latest_json, current_json, data_directory):
+    mod_dir=os.path.join(data_directory,'mods')
+    remove_old_mods(latest_json['modlist'], mod_dir)
+    install_mods(mod_dir, latest_json['modlist'])
+
+def validate_modpack(latest_json, data_directory):
+    mod_dir=os.path.join(data_directory,'mods')
+    for mod in latest_json['modlist']:
+        validate_mod_file(mod_dir, mod)
 
 
 
 
-
-
+#
+#   DEPRECIATED
 def remove_old_modpacks(manifest, data_dir):
     installed_modpacks=[ item for item in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, item)) ]
     for Imodpack in installed_modpacks:
@@ -163,7 +321,10 @@ def remove_old_modpacks(manifest, data_dir):
             logger.info("deleting modpack %s"%Imodpack)
             shutil.rmtree(os.path.join(data_dir, Imodpack))
 
-def remove_old_mods(modlist, mod_dir):
+#
+#   DEPRECIATED
+#
+def depreciated_remove_old_mods(modlist, mod_dir):
     moddirlist=os.listdir(mod_dir)
     for dir in moddirlist:
         if os.path.isdir(os.path.join(mod_dir, dir)):
@@ -181,29 +342,11 @@ def remove_old_mods(modlist, mod_dir):
                 logger.info("Removing %s, no longer in modpack"%file)
                 os.remove(modfile)
 
-def make_server_directory(dir_path):
-    if not os.path.isdir(dir_path):
-        os.mkdir(dir_path)
 
-def is_java_installed():
-    try:
-        subprocess.call(["java","-version"])
-    except FileNotFoundError as e:
-        return False
-    return True
 
-def extract_mc_forge_versions(forge_version):
-    versions = split_versions(forge_version)
-    mc1_ver=r'^\d*[.]\d*[.]\d*'
-    mc2_ver=r'^\d*[.]\d*'
-    if re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[0]):
-        print(re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[0]), versions[0])
-        if re.match(mc1_ver, versions[1]) or re.match(mc2_ver, versions[1]):
-            return versions[1], versions[0]
-    elif re.match(r'^\d*[.]\d*[.]\d*[.]\d*', versions[1]):
-        if re.match(mc1_ver, versions[0]) or re.match(mc2_ver, versions[0]):
-            return versions[0], versions[1]
-    return None, None
+
+
+
 
 def make_modpack_directories(modpack, data_directory=''):
     if not os.path.isdir(os.path.join(data_directory, modpack)):
@@ -214,6 +357,9 @@ def make_modpack_directories(modpack, data_directory=''):
         os.mkdir(os.path.join(data_directory, modpack, "config"))
     return os.path.join(data_directory, modpack)
 
+#
+#   DEPRECIATED
+#
 def install_mod_files(mod_data):
     filename=os.path.join(mod_data['dir'], mod_filename(mod_data['name'],mod_data['version']))
     if not os.path.isfile(filename):
@@ -227,65 +373,20 @@ def create_mc_directories(minecraft_dir):
         os.mkdir(os.path.join(minecraft_dir, 'versions'))
     return os.path.join(minecraft_dir, 'versions')
 
-def install_minecraft(minecraft_version, mc_dir):
-    mc_version_dir=os.path.join(mc_dir, 'versions', minecraft_version)
-    minecraft_manifest_url="https://launchermeta.mojang.com/mc/game/version_manifest.json"
+###########
+#   Launcher Profiles
+###########
+def get_profile_json():
 
-    if not os.path.isdir(mc_version_dir):
-        os.makedirs(mc_version_dir)
-    for version in download_json(minecraft_manifest_url)['versions']:
-        if str(version['id']) == str(minecraft_version):
-            if not ( os.path.isfile(os.path.join(mc_version_dir, filename_from_url(version['url']))) and os.path.isfile(os.path.join(mc_version_dir, "%s.jar"%minecraft_version)) ):
-                logger.debug("Downloading Minecraft %s"%minecraft_version)
-                save_json(os.path.join(mc_version_dir, filename_from_url(version['url'])), download_json(version['url']))
-                version_json = open_json(os.path.join(mc_version_dir, filename_from_url(version['url'])))
-                with open(os.path.join(mc_version_dir, "%s.jar"%minecraft_version), 'wb') as f:
-                    f.write(download(version_json['downloads']['client']['url']))
-                logger.debug('Minecraft Version: %s Installation Complete'%minecraft_version)
-            else:
-                logger.debug('Minecraft Version: %s already installed'%minecraft_version)
+def profile_is_installed(modpack):
+    if
 
-def install_forge(forge_version, minecraft_version, mc_dir):
-    forge_json=os.path.join(mc_dir, 'versions', minecraft_version+'-forge'+forge_version, minecraft_version+'-forge'+forge_version+'.json')
-    forge_jar_paths=[os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(mc_ver)s-%(forge_ver)s"%({'mc_ver':minecraft_version, 'forge_ver':forge_version}), 'forge-%(mc_ver)s-%(forge_ver)s.jar'%({'mc_ver':minecraft_version, 'forge_ver':forge_version})),
-                os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(forge_ver)s"%({'forge_ver':forge_version}), 'forge-%(forge_ver)s.jar'%({'forge_ver':forge_version}))
-                ]
-    forge_dl_urls=["https://files.minecraftforge.net/maven/net/minecraftforge/forge/%s/forge-%s-installer.jar"%(forge_version, forge_version),
-                    "https://files.minecraftforge.net/maven/net/minecraftforge/forge/%(mc_ver)s-%(forge_ver)s/forge-%(mc_ver)s-%(forge_ver)s-installer.jar"%({'mc_ver':minecraft_version, 'forge_ver':forge_version})
-                    ]
-    for forge_jar in forge_jar_paths:
-        if (os.path.isfile(forge_json) and os.path.isfile(forge_jar) ):
-            logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
-            return
 
-    logger.debug("Installing Minecraft Forge version: %s"%forge_version)
-    dirpath = tempfile.mkdtemp()
-    forge_installer=os.path.join(dirpath, "forge-%s-installer.jar"%forge_version)
-    forge_install_data=None
-    for forge_dl_url in forge_dl_urls:
-        try:
-            logger.debug("Attempting to download forge %s at %s"%(forge_version, forge_dl_urls))
-            forge_install_data=download(forge_dl_url)
-            print(forge_install_data)
-            if forge_install_data:
-                break
-        except Exception as e:
-            print(e)
-            continue
-    if not forge_install_data:
-        logger.error("Failed to download Forge Installer!")
-        exit(1) #   <------------------------------------------------------------------ FIX THIS!!!!
-    with open(forge_installer, 'wb') as f:
-        f.write(forge_install_data)
-        result = run(["java", "-jar", forge_installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        logger.debug("Forge Installer Exit Code:", result.returncode)
-        logger.debug(result.stdout.decode('UTF-8'))
-    shutil.rmtree(dirpath)
-    logger.debug('Forge %s installed'%forge_version)
+
 
 def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     forge_version=modpack_info['forge']
-    minecraft_version, bleh=extract_mc_forge_versions(forge_version)
+    minecraft_version=extract_mc_forge_versions(forge_version)[0]
     profile_json=os.path.join(minecraft_dir, "launcher_profiles.json")
     profile = open_json(profile_json)
     timestamp=datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%S.000Z')
@@ -326,11 +427,6 @@ def append_modDir(modpack_json, mod_dir):
     for modinfo in modpack_json['modlist']:
         modinfo['dir']=mod_dir
     return modpack_json
-
-def install_modpack(modpack, data_directory):
-    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
-
-    pass
 
 def install_modpack(modpack, data_directory='', servername=''):
     minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
@@ -440,8 +536,6 @@ def update_manifest(manifest_url, data_dir, manifest_filename):
             make_modpack_directories(modpack[0], data_directory=data_dir)
             install_modpack(modpack, data_dir, latest_manifest['server'])
     return latest_manifest
-
-
 
 def is_admin():
     if os.name=='nt':
