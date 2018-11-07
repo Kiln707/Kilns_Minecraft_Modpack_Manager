@@ -44,6 +44,20 @@ def is_java_installed():
         return False
     return True
 
+def set_data_directory_path(directory_name):
+    data_directory=''
+    if os.name =='nt':
+        data_directory=os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
+    else:
+        data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
+    return data_directory
+
+def get_data_directory():
+    if os.name =='nt':
+        return os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
+    else:
+        return os.path.join(os.path.expanduser(), DATA_DIR_NAME)
+
 #####
 #   File MANIPULATIONS
 #####
@@ -178,8 +192,11 @@ def download_mod(mod_dir, mod_data):
 ###################
 #   Minecraft Section
 ###################
-def install_minecraft(minecraft_version, mc_dir):
-    mc_version_dir=os.path.join(mc_dir, 'versions', minecraft_version)
+def get_minecraft_dir():
+    return minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
+
+def install_minecraft(minecraft_version):
+    mc_version_dir=os.path.join(get_minecraft_dir(), 'versions', minecraft_version)
     minecraft_manifest_url="https://launchermeta.mojang.com/mc/game/version_manifest.json"
 
     if not os.path.isdir(mc_version_dir):
@@ -211,7 +228,8 @@ def extract_mc_forge_versions(forge_version):
             return versions[0], versions[1]
     return None, None
 
-def is_forge_installed(forge_ver, minecraft_ver, mc_dir):
+def is_forge_installed(forge_ver, minecraft_ver):
+    mc_dir=get_minecraft_dir()
     forge_jar_paths=[os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(mc_ver)s-%(forge_ver)s"%({'mc_ver':minecraft_version, 'forge_ver':forge_version}), 'forge-%(mc_ver)s-%(forge_ver)s.jar'%({'mc_ver':minecraft_version, 'forge_ver':forge_version})),
                     os.path.join(mc_dir, 'libraries', 'net','minecraftforge','forge', "%(forge_ver)s"%({'forge_ver':forge_version}), 'forge-%(forge_ver)s.jar'%({'forge_ver':forge_version}))
                     ]
@@ -245,8 +263,14 @@ def get_forge_installer(forge_version, minecraft_version, dir):
         return forge_installer
     return None
 
-def install_forge(forge_version, minecraft_version, mc_dir):
-    if is_forge_installed(forge_version, minecraft_version, mcdir):
+def get_forge_jar(forge_version):
+    forge_ver_dir=os.path.join(get_minecraft_dir(), 'versions', extract_mc_forge_versions(forge_version)[0]+'-forge'+forge_version)
+    for f in os.listdir(forge_ver_dir):
+        if os.path.isfile(os.path.join(forge_ver_dir, f)):
+            return os.path.splitext(f)[0]
+
+def install_forge(forge_version, minecraft_version):
+    if is_forge_installed(forge_version, minecraft_version):
         logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
         return  True
     logger.debug("Installing Minecraft Forge version: %s"%forge_version)
@@ -267,6 +291,9 @@ def install_forge(forge_version, minecraft_version, mc_dir):
 ###################
 #   Modpack Sections
 ###################
+def modpack_directory(modpack_name):
+    return os.path.join(get_data_directory(), modpack_name)
+
 def modpack_isInstalled(modpack, data_dir):
     return os.path.isfile(os.path.join(data_dir, modpack[0], filename_from_url(modpack[1])))
 
@@ -305,49 +332,7 @@ def validate_modpack(latest_json, data_directory):
 
 
 
-
-#
-#   DEPRECIATED
-def remove_old_modpacks(manifest, data_dir):
-    installed_modpacks=[ item for item in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, item)) ]
-    for Imodpack in installed_modpacks:
-        available=False
-        for modpack in manifest['modlist']:
-            if Imodpack == modpack[0]:
-                logger.info("Keeping modpack %s"%Imodpack)
-                available=True
-                break
-        if not available:
-            logger.info("deleting modpack %s"%Imodpack)
-            shutil.rmtree(os.path.join(data_dir, Imodpack))
-
-#
-#   DEPRECIATED
-#
-def depreciated_remove_old_mods(modlist, mod_dir):
-    moddirlist=os.listdir(mod_dir)
-    for dir in moddirlist:
-        if os.path.isdir(os.path.join(mod_dir, dir)):
-            shutil.rmtree(os.path.join(mod_dir, dir))
-    for file in moddirlist:
-        modfile=os.path.join(mod_dir, file)
-        if os.path.isfile(modfile):
-            keep=False
-            for mod in modlist:
-                if file == mod_filename(mod['name'], mod['version']):
-                    logger.info("Match found! %s still in modpack."%file)
-                    keep=True
-                    break
-            if not keep:
-                logger.info("Removing %s, no longer in modpack"%file)
-                os.remove(modfile)
-
-
-
-
-
-
-
+#        WHat to do with this?
 def make_modpack_directories(modpack, data_directory=''):
     if not os.path.isdir(os.path.join(data_directory, modpack)):
         os.mkdir(os.path.join(data_directory, modpack))
@@ -377,11 +362,51 @@ def create_mc_directories(minecraft_dir):
 #   Launcher Profiles
 ###########
 def get_profile_json():
+    return open_json(os.path.join(get_minecraft_dir(), "launcher_profiles.json"))
 
-def profile_is_installed(modpack):
-    if
+def save_profile_json(profiledata):
+    save_json(os.path.join(get_minecraft_dir(), "launcher_profiles.json"), profiledata)
 
+def profile_is_installed(profile_name):
+    if profile_name in get_profile_json():
+        return True
+    return False
 
+def generate_profile_data(modpack, modpack_dir):
+    timestamp=datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    return {'name':modpack['modpack_name'],
+            'type':'custom',
+            'created':timestamp,
+            'lastUsed':timestamp,
+            "lastVersionId":"%s"%str(get_forge_jar(modpack['forge'])),
+            'javaArgs': "-Xmx4G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=16M",
+            'gameDir':modpack_dir}
+
+def insert_profile(profilename, profiledata):
+    launcher=get_profile_json()
+    if not profile_is_installed(profilename):
+        launcher['profiles'][profilename]=profiledata
+        save_profile_json(launcher)
+        logger.debug("Inserted %s into launcher profiles."%profilename)
+        return True
+    return False
+
+def remove_profile(profilename):
+    launcher=get_profile_json()
+    if profile_is_installed(profilename):
+        launcher['profiles'].pop(profilename, None)
+        save_profile_json(launcher)
+        logger.debug("Removed %s from launcher profiles."%profilename)
+        return True
+    return False
+
+def create_server_connection(modpack_info):
+    server_dat_file=os.path.join(modpack_directory(modpack_info['name']), "servers.dat")
+    logger.debug("Writing server connection file to %s"%server_dat_file)
+    if os.path.isfile(server_dat_file):
+        os.remove(server_dat_file)
+    nbtfile = nbt.File({'':nbt.Compound({'servers':List[nbt.Compound]([nbt.Compound({'ip':String(modpack_info['server_address']), 'name': String(SERVERNAME)})])})})
+    nbtfile.save(server_dat_file, gzipped=False)
 
 
 def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
@@ -389,7 +414,7 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     minecraft_version=extract_mc_forge_versions(forge_version)[0]
     profile_json=os.path.join(minecraft_dir, "launcher_profiles.json")
     profile = open_json(profile_json)
-    timestamp=datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
     modpack_name=modpack_info['modpack_name']
     modpack_dir=os.path.join(data_directory, modpack_name)
     forge_ver_dir=os.path.join(minecraft_dir, 'versions', minecraft_version+'-forge'+forge_version)
@@ -398,29 +423,17 @@ def insert_launcher_info(modpack_info, data_dir, minecraft_dir, servername):
     #     logger.error("Forge was not installed!")
     #     exit(1)
     # else:
-    for f in os.listdir(forge_ver_dir):
-        if os.path.isfile(os.path.join(forge_ver_dir, f)):
-            forge, ext = os.path.splitext(f)
 
-    modpack_profile = {'name':modpack_info['modpack_name'],
-                        'type':'custom',
-                        'created':timestamp,
-                        'lastUsed':timestamp,
-                        "lastVersionId":"%s"%str(forge),
-                        'javaArgs': "-Xmx4G -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=16M",
-                        'gameDir':modpack_dir}
+
+
     profile['profiles'].pop(modpack_name, None)
     profile['profiles'][modpack_name]=modpack_profile
     logger.info("Installed profile for %s"%modpack_name)
     logger.debug("Installed %s"%str(modpack_profile))
-    save_json(profile_json, profile)
+
     #Servers.dat file section
-    server_dat_file=os.path.join(data_directory, modpack_name, "servers.dat")
-    logger.debug("Writing server connection file to %s"%server_dat_file)
-    if os.path.isfile(server_dat_file):
-        os.remove(server_dat_file)
-    nbtfile = nbt.File({'':nbt.Compound({'servers':List[nbt.Compound]([nbt.Compound({'ip':String(modpack_info['server_address']), 'name': String(servername)})])})})
-    nbtfile.save(server_dat_file, gzipped=False)
+
+
     logger.info("Created server connection")
 
 def append_modDir(modpack_json, mod_dir):
@@ -429,7 +442,7 @@ def append_modDir(modpack_json, mod_dir):
     return modpack_json
 
 def install_modpack(modpack, data_directory='', servername=''):
-    minecraft_dir=os.path.join(os.getenv('APPDATA'), ".minecraft")
+
     modpack_dir=make_modpack_directories(modpack[0], data_directory)
     mod_dir=os.path.join(modpack_dir, "mods")
     config_dir=os.path.join(modpack_dir, "config")
@@ -656,13 +669,8 @@ def initilize_logger(directory):
 def minecraft_req_met():
     return os.path.isdir(minecraft_dir)
 
-def set_data_directory_path(directory_name):
-    data_directory=''
-    if os.name =='nt':
-        data_directory=os.path.join(os.getenv('APPDATA'), DATA_DIR_NAME)
-    else:
-        data_directory=os.path.join(os.path.expanduser(), DATA_DIR_NAME)
-    return data_directory
+
+
 
 
 
@@ -689,7 +697,7 @@ if __name__ == "__main__":
 
 
     #Editable Variables for installer
-    SERVERNAME='RelatedbyGaming'
+    SERVERNAME='Related by Gaming'
     MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
 
     #DO NOT EDIT THESE VARIABLES
