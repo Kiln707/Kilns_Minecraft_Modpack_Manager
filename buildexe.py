@@ -1,5 +1,18 @@
 import os, shutil
 
+def files_in_dir(path):
+    for file in os.listdir(path):
+        if os.path.isfile(os.path.join(path, file)):
+            yield file
+
+def delete_spec_files(path):
+    for file in files_in_dir(path):
+        if file.endswith('.spec'):
+            os.remove(file)
+
+def delete_directory(path):
+    if os.path.isdir(path):
+        os.system("RMDIR /S /Q %s"%path)
 
 if __name__ == "__main__":
     debug=True
@@ -14,11 +27,11 @@ if __name__ == "__main__":
     dist=os.path.join(cwd, "dist")
 
     #Delete working directories to start clean
-    if os.path.isdir(build):
-        os.system("RMDIR /S /Q %s"%build)
-    if os.path.isdir(dist):
-        os.system("RMDIR /S /Q %s"%dist)
+    delete_directory(build)
+    delete_directory(dist)
+    delete_spec_files(cwd)
 
+    #Start building
     req=os.path.join(cwd, "requirements.txt")
     os.system("pip install -r %s"%req)
 
@@ -28,6 +41,10 @@ if __name__ == "__main__":
     else:
         os.system("pyinstaller --onefile --noconsole --icon=rbg_mc.ico -F modpackInstaller.py")
         os.system("pyinstaller --onefile --noconsole --icon=rbg_mc.ico -F modpackBuilder.py")
+
+    #cleanup
+    delete_directory(build)
+    delete_spec_files(cwd)
 
     #Restore previous
     if pwd != cwd:
