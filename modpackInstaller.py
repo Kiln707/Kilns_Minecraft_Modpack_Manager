@@ -197,6 +197,7 @@ def split_mod_filename(filename):
 def validate_mod_file(mod_dir, mod):
     modfile=os.path.join(mod_dir, mod_filename(mod['name'],mod['version']))
     if download_file_size(mod['download']) != get_file_size(modfile):
+        logger.info("Failed to validate %s redownloading"%mod['name'])
         remove_file(modfile)
         download_mod(mod_dir, mod)
 
@@ -372,7 +373,7 @@ def update_profile(profile_data):
         save_profile_json(launcher)
 
 def create_server_connection(modpack_info):
-    server_dat_file=os.path.join(modpack_directory(modpack_info['name']), "servers.dat")
+    server_dat_file=os.path.join(modpack_directory(modpack_info['modpack_name']), "servers.dat")
     logger.debug("Writing server connection file to %s"%server_dat_file)
     if os.path.isfile(server_dat_file):
         os.remove(server_dat_file)
@@ -386,7 +387,7 @@ def modpack_directory(modpack_name):
     return os.path.join(get_data_directory(), modpack_name)
 
 def modpack_isInstalled(modpack):
-    return os.path.isfile(os.path.join(modpack_directory(modpack[0]), filename_from_url(modpack[1])))
+    return os.path.isfile(os.path.join(modpack_directory(modpack[0]), modpack[0]))
 
 def download_modpack_manifest(url):
     return download_json(url)
@@ -432,6 +433,8 @@ def install_modpack(latest_json):
     install_configs(latest_json)
     install_mods(latest_json)
     insert_profile(latest_json['modpack_name'], generate_profile_data(latest_json, mod_dir))
+    create_server_connection(latest_json)
+    save_json(os.path.join(mod_dir, modpack[0]+'.json'), latest_json)
 
 def uninstall_modpack(modpack):
     remove_profile(modpack[0])
@@ -447,7 +450,7 @@ def update_modpack(latest_json):
     update_profile(generate_profile_data(latest_modlist['name'], mod_dir))
 
 def validate_modpack(latest_json):
-    mod_dir=modpack_directory(latest_json['modpack_name'])
+    mod_dir=os.path.join(modpack_directory(latest_json['modpack_name']), "mods")
     for mod in latest_json['modlist']:
         validate_mod_file(mod_dir, mod)
 
@@ -606,13 +609,12 @@ if __name__ == "__main__":
     logger.info("Running GUI Installer")
     action = installer_gui()
     logger.debug("Running as Administrator: %s"%is_admin())
-    if is_admin():
-        logger.debug("action: "+action)
+    logger.debug("action: "+action)
     if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
         logger.info("Running Modpack Manager Installation.")
         if os.name == 'nt':
 
-            if not is_admin():
+            if not quiet:
                 copy_program(data_directory)
                 logger.debug("Restarting as Administrator to schedule auto-update")
                 if not restart_as_admin('install'):
@@ -630,7 +632,7 @@ if __name__ == "__main__":
         logger.debug("Finished installing initial setup")
     elif action == 'uninstall':
         if os.name == 'nt':
-            if not is_admin():
+            if not quiet:
                 logger.debug("Restarting as Administrator")
                 if not restart_as_admin('uninstall'):
                     logger.error('Failed to uninstall')
