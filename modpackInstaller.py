@@ -204,8 +204,9 @@ def validate_mod_file(mod_dir, mod):
 def download_mod(mod_dir, mod_data):
     filename=os.path.join(mod_dir, mod_filename(mod_data['name'],mod_data['version']))
     if not os.path.isfile(filename):
+        logger.debug("Downloading %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
         download_file(url=mod_data['download'], filename=filename)
-        logger.debug("Downloaded %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
+        logger.debug("Downloaded %s Version: %s to %s"%(mod_data['name'],mod_data['version'], filename))
     else:
         logger.debug("%s Version: %s, is already installed"%(mod_data['name'],mod_data['version']))
 
@@ -224,9 +225,9 @@ def create_mc_directories(minecraft_dir):
     return os.path.join(minecraft_dir, 'versions')
 
 def install_minecraft(minecraft_version):
+    logger.info('Installing Minecraft %s'%minecraft_version)
     mc_version_dir=os.path.join(get_minecraft_dir(), 'versions', minecraft_version)
     minecraft_manifest_url="https://launchermeta.mojang.com/mc/game/version_manifest.json"
-
     if not os.path.isdir(mc_version_dir):
         os.makedirs(mc_version_dir)
     for version in download_json(minecraft_manifest_url)['versions']:
@@ -279,6 +280,7 @@ def download_forge(forge_version):
             logger.debug("Attempting to download forge %s Installer at %s"%(forge_version, forge_dl_urls))
             forge_install_data=download(forge_dl_url)
             if forge_install_data:
+                logger.info('Obtained Forge Installer!')
                 return forge_install_data
         except Exception as e:
             print(e)
@@ -287,6 +289,7 @@ def download_forge(forge_version):
     return None
 
 def get_forge_installer(forge_version, dir):
+    logger.info('Downloading Forge %s Installer.'%forge_version)
     forge_installer=os.path.join(dir, "forge-%s-installer.jar"%forge_version)
     forge_installer_data = download_forge(forge_version)
     if forge_installer_data:
@@ -301,7 +304,6 @@ def get_forge_jar(forge_version):
             return os.path.splitext(f)[0]
 
 def install_forge(forge_version):
-    print(forge_version)
     if is_forge_installed(forge_version):
         logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
         return  True
@@ -310,15 +312,16 @@ def install_forge(forge_version):
     installer = get_forge_installer(forge_version, dirpath)
     success=False
     if installer:
+        logger.info("Running Forge %s Installer"%forge_version)
         result = run(["java", "-jar", installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         logger.debug("Forge Installer Exit Code:", result.returncode)
-        logger.debug(result.stdout.decode('UTF-8'))
         success=True
     delete_directory(dirpath)
     if success:
         logger.debug('Forge %s installed'%forge_version)
         return True
     logger.error('Failed to install Forge %s'%forge_version)
+    return False
 
 ###########
 #   Launcher Profiles
@@ -345,7 +348,9 @@ def generate_profile_data(modpack, modpack_dir):
             'gameDir':modpack_dir}
 
 def insert_profile(profilename, profiledata):
+    logger.info("Inserting %s into launcher profiles"%profilename)
     launcher=get_profile_json()
+    logger.debug('Profile is installed: %s'%profile_is_installed(profilename))
     if not profile_is_installed(profilename):
         launcher['profiles'][profilename]=profiledata
         save_profile_json(launcher)
@@ -354,6 +359,7 @@ def insert_profile(profilename, profiledata):
     return False
 
 def remove_profile(profilename):
+    logger.info("Removing %s from launcher profiles"%profilename)
     launcher=get_profile_json()
     if profile_is_installed(profilename):
         launcher['profiles'].pop(profilename, None)
@@ -363,6 +369,7 @@ def remove_profile(profilename):
     return False
 
 def update_profile(profile_data):
+    logger.info("Updating launcher profile")
     launcher = get_profile_json()
     update=False
     for key, value in launcher['profiles'][profile_data['name']]:
@@ -370,9 +377,11 @@ def update_profile(profile_data):
             launcher[key] = profile_data[key]
             update=True
     if update:
+        logger.debug('Updated profile')
         save_profile_json(launcher)
 
 def create_server_connection(modpack_info):
+    logger.info('Creating Server connection file')
     server_dat_file=os.path.join(modpack_directory(modpack_info['modpack_name']), "servers.dat")
     logger.debug("Writing server connection file to %s"%server_dat_file)
     if os.path.isfile(server_dat_file):
@@ -401,6 +410,7 @@ def create_modpack_directories(dir):
     make_directory(os.path.join(dir, 'config'))
 
 def get_current_modpack_manifest(modpack):
+    logger.info("Obtaining saved manifest for modpack %s"%modpack)
     manifest_filename = os.path.join(modpack_directory(modpack[0]), str(filename_from_url(modpack[1])) )
     current_manifest=None
     if os.path.isfile(manifest_filename):
@@ -408,6 +418,7 @@ def get_current_modpack_manifest(modpack):
     return current_manifest
 
 def remove_old_mods(latest_modlist):
+    logger.info('Removing old mods for modpack %s'%latest_json['modpack_name'])
     mod_dir =os.path.join(modpack_directory(latest_json['modpack_name']), "mods")
     for file in files_in_dir(mod_dir):
         splitname=split_mod_filename(file)
@@ -416,9 +427,11 @@ def remove_old_mods(latest_modlist):
             if mod['name'] == splitname[0] and mod['version'] == splitname[1]:
                 remove=False
                 break
-        remove_file(os.path.join(mod_dir, file))
+        if remove:
+            remove_file(os.path.join(mod_dir, file))
 
 def install_mods(latest_json):
+    logger.info('Installing mods for modpack %s'%latest_json['modpack_name'])
     mod_dir = os.path.join(modpack_directory(latest_json['modpack_name']), "mods")
     for mod in latest_json['modlist']:
         download_mod(mod_dir, mod)
@@ -437,10 +450,12 @@ def install_modpack(latest_json):
     save_json(os.path.join(mod_dir, modpack[0]+'.json'), latest_json)
 
 def uninstall_modpack(modpack):
+    logger.info("Removing Modpack %s"%modpack[0])
     remove_profile(modpack[0])
     delete_directory(modpack_directory(modpack[0]))
 
 def update_modpack(latest_json):
+    logger.info('Updating modpack %s'%latest_json['modpack_name'])
     mod_dir=modpack_directory(latest_json['modpack_name'])
     remove_old_mods(latest_json['modlist'])
     install_minecraft(extract_mc_forge_versions(latest_json['forge'])[0])
@@ -450,6 +465,7 @@ def update_modpack(latest_json):
     update_profile(generate_profile_data(latest_modlist['name'], mod_dir))
 
 def validate_modpack(latest_json):
+    logger.info('Validating Modpack installation')
     mod_dir=os.path.join(modpack_directory(latest_json['modpack_name']), "mods")
     for mod in latest_json['modlist']:
         validate_mod_file(mod_dir, mod)
