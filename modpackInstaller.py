@@ -103,10 +103,13 @@ def download(url=None):
     except HTTPError as e:
         print(e.code)
         print(e.read())
+        return None
     except URLError as e:
         print(e.read().decode("utf8", 'ignore'))
+        return None
     except Exception as e:
         print(type(e))
+        return None
     return None
 
 def filename_from_url(url=None):
@@ -141,16 +144,26 @@ def download_json(url=None):
     return None
 
 def download_file(url, filename):
-    with open(filename, "wb+") as f:
-        f.write(download(url))
+    data = download(url)
+    if data:
+        with open(filename, "wb+") as f:
+            f.write(data)
+            return True
+    else:
+        logging.error("Did not receive data from url: %s"%url)
+    return False
 
 def download_file_size(url):
-    with request.urlopen(url) as r:
-        return int(r.info()['Content-Length'])
+    try:
+        with request.urlopen(url) as r:
+            return int(r.info()['Content-Length'])
+    except:
+        pass
     return 0
 
 def get_file_size(filename):
     if os.path.isfile(filename):
+        logger.debug("%s exists"%filename)
         return os.path.getsize(filename)
     return 0
 
@@ -196,19 +209,39 @@ def split_mod_filename(filename):
 
 def validate_mod_file(mod_dir, mod):
     modfile=os.path.join(mod_dir, mod_filename(mod['name'],mod['version']))
-    if download_file_size(mod['download']) != get_file_size(modfile):
-        logger.info("Failed to validate %s redownloading"%mod['name'])
+    download=False
+    logger.debug("Validating %s"%modfile)
+    dl_size = download_file_size(mod['download'])
+    file_size = get_file_size(modfile)
+    if not dl_size:
+        download=True
+        logger.debug("%s %s"%(dl_size, file_size))
+        logger.info("Unable to validate file %s, redownloading"%mod['name'])
+    elif not file_size:
+        download=True
+        logger.debug("%s %s"%(dl_size, file_size))
+        logger.info("File for %s does not exist; redownloading"%mod['name'])
+    elif  dl_size != file_size:
+        download=True
+        logger.debug("%s %s"%(dl_size, file_size))
+        logger.info("Failed to validate %s, redownloading"%mod['name'])
+    if download:
         remove_file(modfile)
-        download_mod(mod_dir, mod)
+        if not download_mod(mod_dir, mod):
+            return False
+    return True
 
 def download_mod(mod_dir, mod_data):
     filename=os.path.join(mod_dir, mod_filename(mod_data['name'],mod_data['version']))
     if not os.path.isfile(filename):
-        logger.debug("Downloading %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
-        download_file(url=mod_data['download'], filename=filename)
-        logger.debug("Downloaded %s Version: %s to %s"%(mod_data['name'],mod_data['version'], filename))
+        if download_file(url=mod_data['download'], filename=filename):
+            logger.info("Downloaded %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
+        else:
+            logger.error("Failed to download %s Version: %s, from %s"%(mod_data['name'],mod_data['version'], mod_data['download']))
+            return False
     else:
         logger.debug("%s Version: %s, is already installed"%(mod_data['name'],mod_data['version']))
+    return True
 
 ###################
 #   Minecraft Section
@@ -228,6 +261,7 @@ def install_minecraft(minecraft_version):
     logger.info('Installing Minecraft %s'%minecraft_version)
     mc_version_dir=os.path.join(get_minecraft_dir(), 'versions', minecraft_version)
     minecraft_manifest_url="https://launchermeta.mojang.com/mc/game/version_manifest.json"
+
     if not os.path.isdir(mc_version_dir):
         os.makedirs(mc_version_dir)
     for version in download_json(minecraft_manifest_url)['versions']:
@@ -280,7 +314,7 @@ def download_forge(forge_version):
             logger.debug("Attempting to download forge %s Installer at %s"%(forge_version, forge_dl_urls))
             forge_install_data=download(forge_dl_url)
             if forge_install_data:
-                logger.info('Obtained Forge Installer!')
+                logger.debug('Obtained Forge Installer!')
                 return forge_install_data
         except Exception as e:
             print(e)
@@ -304,6 +338,7 @@ def get_forge_jar(forge_version):
             return os.path.splitext(f)[0]
 
 def install_forge(forge_version):
+    print(forge_version)
     if is_forge_installed(forge_version):
         logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
         return  True
@@ -315,6 +350,7 @@ def install_forge(forge_version):
         logger.info("Running Forge %s Installer"%forge_version)
         result = run(["java", "-jar", installer], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         logger.debug("Forge Installer Exit Code:", result.returncode)
+        logger.debug(result.stdout.decode('UTF-8'))
         success=True
     delete_directory(dirpath)
     if success:
@@ -350,7 +386,6 @@ def generate_profile_data(modpack, modpack_dir):
 def insert_profile(profilename, profiledata):
     logger.info("Inserting %s into launcher profiles"%profilename)
     launcher=get_profile_json()
-    logger.debug('Profile is installed: %s'%profile_is_installed(profilename))
     if not profile_is_installed(profilename):
         launcher['profiles'][profilename]=profiledata
         save_profile_json(launcher)
@@ -369,7 +404,6 @@ def remove_profile(profilename):
     return False
 
 def update_profile(profile_data):
-    logger.info("Updating launcher profile")
     launcher = get_profile_json()
     update=False
     for key, value in launcher['profiles'][profile_data['name']]:
@@ -377,7 +411,7 @@ def update_profile(profile_data):
             launcher[key] = profile_data[key]
             update=True
     if update:
-        logger.debug('Updated profile')
+        logger.info("Saving updated launcher profiles")
         save_profile_json(launcher)
 
 def create_server_connection(modpack_info):
@@ -410,7 +444,6 @@ def create_modpack_directories(dir):
     make_directory(os.path.join(dir, 'config'))
 
 def get_current_modpack_manifest(modpack):
-    logger.info("Obtaining saved manifest for modpack %s"%modpack)
     manifest_filename = os.path.join(modpack_directory(modpack[0]), str(filename_from_url(modpack[1])) )
     current_manifest=None
     if os.path.isfile(manifest_filename):
@@ -428,17 +461,18 @@ def remove_old_mods(latest_modlist):
                 remove=False
                 break
         if remove:
+            logger.info("Removing old mod file %s"%file)
             remove_file(os.path.join(mod_dir, file))
 
 def install_mods(latest_json):
     logger.info('Installing mods for modpack %s'%latest_json['modpack_name'])
     mod_dir = os.path.join(modpack_directory(latest_json['modpack_name']), "mods")
     for mod in latest_json['modlist']:
-        download_mod(mod_dir, mod)
+        if not download_mod(mod_dir, mod):
+            logging.error("Failed to download mod %s"%mod)
 
 def install_modpack(latest_json):
     logger.info("Installing Modpack %s"%latest_json['modpack_name'])
-    print(latest_json['forge'])
     mod_dir=modpack_directory(latest_json['modpack_name'])
     create_modpack_directories(mod_dir)
     install_minecraft(extract_mc_forge_versions(latest_json['forge'])[0])
@@ -450,12 +484,10 @@ def install_modpack(latest_json):
     save_json(os.path.join(mod_dir, modpack[0]+'.json'), latest_json)
 
 def uninstall_modpack(modpack):
-    logger.info("Removing Modpack %s"%modpack[0])
     remove_profile(modpack[0])
     delete_directory(modpack_directory(modpack[0]))
 
 def update_modpack(latest_json):
-    logger.info('Updating modpack %s'%latest_json['modpack_name'])
     mod_dir=modpack_directory(latest_json['modpack_name'])
     remove_old_mods(latest_json['modlist'])
     install_minecraft(extract_mc_forge_versions(latest_json['forge'])[0])
@@ -465,7 +497,6 @@ def update_modpack(latest_json):
     update_profile(generate_profile_data(latest_modlist['name'], mod_dir))
 
 def validate_modpack(latest_json):
-    logger.info('Validating Modpack installation')
     mod_dir=os.path.join(modpack_directory(latest_json['modpack_name']), "mods")
     for mod in latest_json['modlist']:
         validate_mod_file(mod_dir, mod)
@@ -483,7 +514,9 @@ def copy_program(data_dir):
     logger.debug("Finished copying program")
 
 def schedule(data_dir):
+    logger.info('Scheduling Auto-Update!')
     if os.name == 'nt':
+        logger.debug('Scheduling for windows')
         result = run(['schtasks.exe', '/QUERY', '/TN', '%s_Modpack_Manager'%SERVERNAME], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if result.returncode:
             logger.debug("Auto update was not scheduled, installing")
@@ -629,7 +662,6 @@ if __name__ == "__main__":
     if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
         logger.info("Running Modpack Manager Installation.")
         if os.name == 'nt':
-
             if not quiet:
                 copy_program(data_directory)
                 logger.debug("Restarting as Administrator to schedule auto-update")
@@ -685,36 +717,41 @@ if __name__ == "__main__":
     try:
         # Download Latest manifest. Install/update modpacks
         latest_manifest = download_json(MANIFEST_URL)
-        for modpack in latest_manifest['modlist']:
-            logger.debug('Installing modpack %s: %s'%(modpack[0], (not modpack_isInstalled(modpack[0]))) )
-            #
-            #Install Modpack Section
-            #
-            latest_modpack_manifest = download_modpack_manifest(modpack[1])
-            current_modpack_manifest=get_current_modpack_manifest(modpack[0]) #get_current_modpack_manifest(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))))
-
-            if not modpack_isInstalled(modpack[0]):
-                install_modpack(latest_modpack_manifest)
-            elif current_modpack_manifest and update_available(latest_modpack_manifest, current_modpack_manifest):
-                logger.debug('Updating modpack %s'%modpack[0])
-                update_modpack(latest_modpack_manifest)
-            validate_modpack(latest_modpack_manifest)
-            if current_modpack_manifest and update_available(latest_modpack_manifest, current_modpack_manifest):
-                save_json(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))), latest_modpack_manifest)
-        #
-        # Save Manifest for uninstallation purposes
-        #
-        current_manifest = get_current_manifest()
-        if current_manifest:
-            if update_available(latest_manifest, current_manifest):
-                save_json(manifest_filename(), latest_manifest)
+        if not latest_manifest:
+            logger.error("Failed to download manifest from %s"%MANIFEST_URL)
+            exit(1)
         else:
-            save_json(manifest_filename(), latest_manifest)
+            modpacks=latest_manifest['modlist']
+            logger.info('Checking %s modpacks'%len(modpacks))
+            for modpack in modpacks:
+                logger.debug('Installing modpack %s: %s'%(modpack[0], (not modpack_isInstalled(modpack[0]))) )
+                #
+                #Install Modpack Section
+                #
+                latest_modpack_manifest = download_modpack_manifest(modpack[1])
+                current_modpack_manifest=get_current_modpack_manifest(modpack[0]) #get_current_modpack_manifest(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))))
+
+                if not modpack_isInstalled(modpack[0]):
+                    install_modpack(latest_modpack_manifest)
+                elif current_modpack_manifest and update_available(latest_modpack_manifest, current_modpack_manifest):
+                    logger.debug('Updating modpack %s'%modpack[0])
+                    update_modpack(latest_modpack_manifest)
+                validate_modpack(latest_modpack_manifest)
+                if current_modpack_manifest and update_available(latest_modpack_manifest, current_modpack_manifest):
+                    save_json(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))), latest_modpack_manifest)
+            #
+            # Save Manifest for uninstallation purposes
+            #
             current_manifest = get_current_manifest()
+            if current_manifest:
+                if update_available(latest_manifest, current_manifest):
+                    save_json(manifest_filename(), latest_manifest)
+            else:
+                save_json(manifest_filename(), latest_manifest)
+                current_manifest = get_current_manifest()
     except :
-        logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
+        logger.error("%s %s"%(sys.exc_info()[0:1],traceback.extract_tb(sys.exc_info()[2])))
         input("Please contact an Administrator for help. Press Enter to continue.")
         exit(1)
-    if not current_manifest:
-        logger.debug("Failed to download manifest from %s"%MANIFEST_URL)
-        exit(1)
+
+input("Press Enter to continue...")
