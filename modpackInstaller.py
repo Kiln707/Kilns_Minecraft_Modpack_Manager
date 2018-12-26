@@ -597,7 +597,7 @@ def initilize_logger(directory, level = logging.INFO):
     logger = logging.getLogger('Modpack_Manager')
     logger.setLevel(level)
     fh = logging.FileHandler(os.path.join(directory, 'modpack-manager.log'))
-    fh.setLevel(level))
+    fh.setLevel(level)
 
     ch = logging.StreamHandler()
     ch.setLevel(level)
@@ -622,7 +622,7 @@ def get_current_manifest():
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="1.0.0"
+VERSION="2.0.0"
 DEBUG=False
 
 if __name__ == "__main__":

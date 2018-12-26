@@ -313,7 +313,7 @@ class ManifestBuilder(Frame):
         for row in file_data['modlist']:
             self.create_row(row)
 
-VERSION="1.0.0"
+VERSION="2.0.0"
 
 if __name__ == "__main__":
     if sys.argv[1] == 'version':

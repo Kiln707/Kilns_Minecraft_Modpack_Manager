@@ -1,0 +1,1 @@
+python buildexe.py -m

@@ -1,2 +1,0 @@
-python buildexe.py
-pause
