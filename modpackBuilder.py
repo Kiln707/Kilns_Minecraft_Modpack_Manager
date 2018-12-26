@@ -1,6 +1,7 @@
 from tkinter import *
 from tkinter import filedialog
 from editabletreeview import EditableTreeview
+from operator import itemgetter
 
 import urllib.request as request
 
@@ -110,6 +111,22 @@ class ModpackBuilder(Frame):
         row = self.modpack_list.get_event_info()
         self.modpack_list.delete(row[1])
 
+    def generate_modlist(self):
+        modlist=[]
+        for row in self.modpack_list.get_children():
+            values = self.modpack_list.item(row)['values']
+            modlist.append(values)
+        return modlist
+
+    def generate_modlist_dict(self):
+        modlist=[]
+        for mod in self.sort_list(self.generate_modlist()):
+            modlist.append({'name':mod[0], 'version':mod[1], 'info':mod[2], 'download':mod[3]})
+        return modlist
+
+    def sort_list(self, list, sort_index=0):
+        return sorted(list, key=lambda mod: mod[0].lower())
+
     def save_list(self):
         file_data={}
         filename = filedialog.asksaveasfilename(title="Save Modpack List", filetypes=(('json files',"*.json"),))
@@ -123,11 +140,7 @@ class ModpackBuilder(Frame):
             configlink='http://%s'%configlink
         file_data['config_link']=configlink
         file_data['server_address']=self.text_server.get('1.0', END).strip()
-        modlist=[]
-        for row in self.modpack_list.get_children():
-            values = self.modpack_list.item(row)['values']
-            modlist.append({'name':values[0],'version':values[1],'info':values[2],'download':values[3]})
-        file_data['modlist']=modlist
+        file_data['modlist']=self.generate_modlist_dict()
         with open(filename, 'w+') as file:
             json.dump(file_data, file)
 
@@ -160,7 +173,6 @@ class ModpackBuilder(Frame):
         for row in file_data['modlist']:
             mod=[]
             for key, value in row.items():
-                print(key, value)
                 mod.append(value)
             self.create_row(mod)
 
@@ -170,9 +182,10 @@ class ModpackBuilder(Frame):
             return
         elif "." not in filename:
             filename+=".txt"
+        modpack_list=self.sort_list(self.generate_modlist())
         modlist = ""
-        for row in self.modpack_list.get_children():
-            modlist+=", ".join(str(e) for e in self.modpack_list.item(row)['values'])+'\n'
+        for mod in modpack_list:
+            modlist+=", ".join(str(e) for e in mod)+'\n'
         with open(filename, 'w+') as file:
             file.write("%(modpack_name)s  Version:%(version)s\nForge Version:%(forge)s\nConfiguration File Download Location:%(config)s\nMods:\n%(modlist)s" % {'modpack_name':self.text_name.get('1.0', END).strip(), 'version':self.text_version.get('1.0', END).strip(), 'modlist':modlist, 'config':self.text_name.get('1.0', END).strip(), 'forge':self.text_forge.get('1.0',END).strip()})
 
