@@ -14,6 +14,14 @@ import validators
 from urllib.error import HTTPError, URLError
 import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys, tempfile, time, traceback
 
+#####################################
+# Editable Variables for installer
+#####################################
+#   Server name for Modpack, Will be used in connections
+SERVERNAME='Related by Gaming'
+#   URL For the modpack manifest.
+MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
+
 #####
 #   helpers and Checkers
 #####
@@ -585,14 +593,14 @@ def installer_gui():
     logger.debug("Quiet installation")
     return action
 
-def initilize_logger(directory):
+def initilize_logger(directory, level = logging.INFO):
     logger = logging.getLogger('Modpack_Manager')
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(level)
     fh = logging.FileHandler(os.path.join(directory, 'modpack-manager.log'))
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(level))
 
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
+    ch.setLevel(level)
     formatter = logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s')
     fh.setFormatter(formatter)
     ch.setFormatter(formatter)
@@ -610,17 +618,19 @@ def get_current_manifest():
         return open_json(manifest_filename())
     return None
 
-#Editable Variables for installer
-SERVERNAME='Related by Gaming'
-MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
-VERSION="1.0.0"
-
 ############################################################
 #   Entry Point
 ############################################################
+# Do not edit, Modified when changes are made
+VERSION="1.0.0"
+DEBUG=False
+
 if __name__ == "__main__":
     quiet=False
     action=''
+    #Valid formats are installer.exe action or installer.exe quiet action
+    #Check if quiet, grab action
+    #TODO: Replace with argparse
     if len(sys.argv) > 1:
         if sys.argv[1] == 'quiet':
             quiet=True
@@ -628,8 +638,9 @@ if __name__ == "__main__":
         else:
             action = sys.argv[1]
 
+    # If we are just checking the version, catch and close quickly.
     if action == 'version':
-        print("Modpack Installer Version: %s"%VERSION)
+        print("Kiln's Modpack Installer Version: %s"%VERSION)
         exit(0)
 
     #DO NOT EDIT THESE VARIABLES
@@ -637,7 +648,10 @@ if __name__ == "__main__":
     data_directory = set_data_directory_path()
     make_directory(data_directory)
     #Initializeing Logger
-    logger = initilize_logger(data_directory)
+    if DEBUG:
+        logger = initilize_logger(data_directory, level=logging.DEBUG)
+    else:
+        logger = initilize_logger(data_directory)
 
     if not minecraft_is_installed():
         logger.error("ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
