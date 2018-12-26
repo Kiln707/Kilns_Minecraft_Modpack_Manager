@@ -101,14 +101,10 @@ def download(url=None):
         response = request.urlopen(url)
         return response.read()
     except HTTPError as e:
-        print(e.code)
-        print(e.read())
         return None
     except URLError as e:
-        print(e.read().decode("utf8", 'ignore'))
         return None
     except Exception as e:
-        print(type(e))
         return None
     return None
 
@@ -317,7 +313,6 @@ def download_forge(forge_version):
                 logger.debug('Obtained Forge Installer!')
                 return forge_install_data
         except Exception as e:
-            print(e)
             continue
     logger.error("Failed to download Forge Installer!")
     return None
@@ -338,7 +333,6 @@ def get_forge_jar(forge_version):
             return os.path.splitext(f)[0]
 
 def install_forge(forge_version):
-    print(forge_version)
     if is_forge_installed(forge_version):
         logger.debug("Minecraft Forge Version: %s is already installed"%forge_version)
         return  True
@@ -616,6 +610,10 @@ def get_current_manifest():
         return open_json(manifest_filename())
     return None
 
+#Editable Variables for installer
+SERVERNAME='Related by Gaming'
+MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
+VERSION="1.0.0"
 
 ############################################################
 #   Entry Point
@@ -623,7 +621,6 @@ def get_current_manifest():
 if __name__ == "__main__":
     quiet=False
     action=''
-    print(len(sys.argv), sys.argv)
     if len(sys.argv) > 1:
         if sys.argv[1] == 'quiet':
             quiet=True
@@ -631,9 +628,9 @@ if __name__ == "__main__":
         else:
             action = sys.argv[1]
 
-    #Editable Variables for installer
-    SERVERNAME='Related by Gaming'
-    MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
+    if action == 'version':
+        print("Modpack Installer Version: %s"%VERSION)
+        exit(0)
 
     #DO NOT EDIT THESE VARIABLES
     DATA_DIR_NAME=".%s"%SERVERNAME
