@@ -14,6 +14,8 @@ def delete_directory(path):
     if os.path.isdir(path):
         os.system("RMDIR /S /Q %s"%path)
 
+#TODO: Add code to increment version of builder/installer
+
 if __name__ == "__main__":
     debug=True
 

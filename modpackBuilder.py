@@ -7,6 +7,8 @@ import urllib.request as request
 
 import json
 
+VERSION="1.0.0"
+
 class ModpackBuilder(Frame):
 
     def __init__(self, master=None):
@@ -313,8 +315,12 @@ class ManifestBuilder(Frame):
         for row in file_data['modlist']:
             self.create_row(row)
 
-root=Tk()
+if __name__ == "__main__":
+    if sys.argv[1] == 'version':
+        print("Kiln's Modpack Builder Version: %s"%VERSION)
+        exit(0)
+    root=Tk()
 
-app=ModpackBuilder(root)
+    app=ModpackBuilder(root)
 
-root.mainloop()
+    root.mainloop()
