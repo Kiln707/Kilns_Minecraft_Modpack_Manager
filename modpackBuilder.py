@@ -7,8 +7,6 @@ import urllib.request as request
 
 import json
 
-VERSION="1.0.0"
-
 class ModpackBuilder(Frame):
 
     def __init__(self, master=None):
@@ -314,6 +312,8 @@ class ManifestBuilder(Frame):
             self.modpack_list.delete(row)
         for row in file_data['modlist']:
             self.create_row(row)
+
+VERSION="1.0.0"
 
 if __name__ == "__main__":
     if sys.argv[1] == 'version':
