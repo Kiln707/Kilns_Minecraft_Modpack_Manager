@@ -753,5 +753,3 @@ if __name__ == "__main__":
         logger.error("%s %s"%(sys.exc_info()[0:1],traceback.extract_tb(sys.exc_info()[2])))
         input("Please contact an Administrator for help. Press Enter to continue.")
         exit(1)
-
-input("Press Enter to continue...")
