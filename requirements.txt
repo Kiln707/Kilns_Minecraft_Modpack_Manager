@@ -1,3 +1,4 @@
 nbtlib >= 1.2.2
 pyinstaller >= 3.4
 validators >= 0.12.2
+pypiwin32
