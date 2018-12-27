@@ -622,7 +622,7 @@ def get_current_manifest():
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="3.0.0"
+VERSION="1.0.1"
 DEBUG=False
 
 if __name__ == "__main__":
