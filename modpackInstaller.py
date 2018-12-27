@@ -699,7 +699,7 @@ def upgrade(data_dir):
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="1.0.20"
+VERSION="1.0.0"
 DEBUG=False
 
 if __name__ == "__main__":
