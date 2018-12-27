@@ -26,6 +26,11 @@ MANIFEST_URL = "http://relatedbygaming.ddns.net/static/files/minecraft/rbg_mc.ma
 #####
 #   helpers and Checkers
 #####
+def fatal(msg):
+    logging.error(msg)
+    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\n%s\n Please contact an administrator!"%msg, 1)
+    sys.exit(1)
+
 def correct_url(url):
     if url.startswith('http://'):
         return 'http://'+quote(url[7:])
@@ -139,7 +144,10 @@ def remove_file(filename):
 def downloadExtact_zip(dir, url=''):
     logger.debug("Downloading zipfile from %s"%url)
     resp = download(url)
-    zipfile = ZipFile(BytesIO(resp))
+    try:
+        zipfile = ZipFile(BytesIO(resp))
+    except Exception as e:
+        fatal("Failed to download or unpack configuration from %s.\nError Code:%s"%(url, e))
     zipfile.extractall(dir)
 
 def download_json(url=None):
@@ -678,9 +686,7 @@ def upgrade_available(data_dir):
         logger.info("Upgrade Available")
         return True
     elif version_check(VERSION, installed_version) == -1:
-        logger.error("Using older version of installer. Exiting!")
-        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nYou are using an older version of this program than what is installed.\nPlease use the installed version.", 1)
-        sys.exit(1)
+        fatal("You are using an older version of this program than what is installed.\nPlease use the installed version.")
     return False
 
 def upgrade(data_dir):
@@ -694,7 +700,7 @@ def upgrade(data_dir):
 ############################################################
 # Do not edit, Modified when changes are made
 VERSION="1.0.20"
-DEBUG=True
+DEBUG=False
 
 if __name__ == "__main__":
     quiet=False
@@ -725,13 +731,9 @@ if __name__ == "__main__":
         logger = initilize_logger(data_directory)
 
     if not minecraft_is_installed():
-        logger.error("ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
-        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.", 1)
-        sys.exit(1)
+        fatal("Minecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
     if not is_java_installed():
-        logger.error("ERROR! Install Java from https://www.java.com/en/download/")
-        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nInstall Java from https://www.java.com/en/download/", 1)
-        sys.exit(1)
+        fatal("Java is not installed.\nPlease install Java from https://www.java.com/en/download/")
 
     print(isinstalled(data_directory) and upgrade_available(data_directory))
     if isinstalled(data_directory) and upgrade_available(data_directory):
@@ -755,9 +757,7 @@ if __name__ == "__main__":
                 copy_program(data_directory)
                 logger.debug("Restarting as Administrator to schedule auto-update")
                 if not restart_as_admin('install'):
-                    logger.error("Failed to schedule")
-                    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to schedule auto-update", 1)
-                    sys.exit(1)
+                    fatal("Failed to schedule updater")
             else:
                 try:
                     schedule(data_directory)
@@ -772,9 +772,7 @@ if __name__ == "__main__":
             if not quiet:
                 logger.debug("Restarting as Administrator")
                 if not restart_as_admin('uninstall'):
-                    logger.error('Failed to uninstall')
-                    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to remove schedule", 1)
-                    sys.exit(1)
+                    fatal("Failed to remove updater")
                 manifest = get_current_manifest()
                 if manifest:
                     for modpack in manifest['modlist']:
@@ -820,8 +818,7 @@ if __name__ == "__main__":
                 latest_modpack_manifest = download_modpack_manifest(modpack[1])
                 current_modpack_manifest=get_current_modpack_manifest(modpack[0]) #get_current_modpack_manifest(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))))
                 if not latest_modpack_manifest:
-                    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to download latest Manifest from %s\n Please contact an administrator!"%modpack[1], 1)
-                    exit(1)
+                    fatal("Failed to download latest manifest from %s"%modpack[1])
 
                 if not modpack_isInstalled(modpack[0]):
                     install_modpack(latest_modpack_manifest)
@@ -843,5 +840,4 @@ if __name__ == "__main__":
                 current_manifest = get_current_manifest()
     except :
         logger.error("%s %s"%(sys.exc_info()[0:1],traceback.extract_tb(sys.exc_info()[2])))
-        input("Please contact an Administrator for help. Press Enter to continue.")
         sys.exit(1)
