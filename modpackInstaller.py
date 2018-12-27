@@ -21,7 +21,7 @@ import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys
 #   Server name for Modpack, Will be used in connections
 SERVERNAME='Related by Gaming'
 #   URL For the modpack manifest.
-MANIFEST_URL = "http://relatedbygaming.ddns.net/files/minecraft/rbg_mc.manifest"
+MANIFEST_URL = "http://relatedbygaming.ddns.net/static/files/minecraft/rbg_mc.manifest"
 
 #####
 #   helpers and Checkers
@@ -144,8 +144,12 @@ def downloadExtact_zip(dir, url=''):
 
 def download_json(url=None):
     data = download(url)
+    print(data)
     if data:
-        return json.loads(data.decode('utf-8'))
+        try:
+            return json.loads(data.decode('utf-8'))
+        except:
+            pass
     return None
 
 def download_file(url, filename):
@@ -507,10 +511,18 @@ def validate_modpack(latest_json):
 ##########
 #   Program tools
 ##########
+def isinstalled(data_dir):
+    return os.path.isfile(os.path.join(data_dir, filename_from_path(get_executable()).strip('.\/')))
+
+def delete_program(data_dir):
+    logger.info("Deleting program")
+    if isinstalled(data_dir):
+        os.remove(os.path.join(data_dir, filename_from_path(get_executable()).strip('.\/')))
+
 def copy_program(data_dir):
-    logger.debug("Copying program from %s to %s"%( sys.executable, os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')) ))
-    with open(os.path.join(data_dir, filename_from_path(sys.executable).strip('.\/')), "wb+") as f:
-        logger.debug("Opened %s for writing"%os.path.join(data_dir, filename_from_path(sys.executable).strip('.\/')))
+    logger.info("Copying program from %s to %s"%( get_executable(), os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')) ))
+    with open(os.path.join(data_dir, filename_from_path(get_executable()).strip('.\/')), "wb+") as f:
+        logger.debug("Opened %s for writing"%os.path.join(data_dir, filename_from_path(get_executable()).strip('.\/')))
         with open(sys.argv[0],"rb") as o:
             logger.debug("Opened %s for reading"% sys.argv[0])
             f.write(o.read())
@@ -524,7 +536,7 @@ def schedule(data_dir):
         if result.returncode:
             logger.debug("Auto update was not scheduled, installing")
             with open(os.path.join(data_dir, 'autoupdate.cmd'), 'w+') as f:
-                f.write('%s quiet update'%os.path.join(data_dir, filename_from_path(sys.executable).strip('.\/')))
+                f.write('%s quiet update'%os.path.join(data_dir, filename_from_path(get_executable()).strip('.\/')))
             run("schtasks.exe /CREATE /SC ONLOGON /RU %(user)s /TN %(servername)s_Modpack_Manager /TR %(executable)s"%({'user':getpass.getuser(), 'servername':SERVERNAME, 'executable': os.path.join(data_dir, 'autoupdate.cmd')}), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         else:
             logger.debug("Auto update is already scheduled")
@@ -564,8 +576,6 @@ class Installer(Frame):
         self.server=server
         self.value=None
         if self.isInstalled():
-            if self.update_available():
-                self.upgrade=Button(self.master, text="Upgrade %s Modpack Manager"%self.server, command=partial(self.onButtonClick, value='upgrade')).grid(row=1, column=0, padx=10, pady=10)
             self.uninstall=Button(self.master, text="Uninstall %s Modpack Manager"%self.server, command=partial(self.onButtonClick, value='uninstall')).grid(row=0, column=0, padx=10, pady=10)
             self.update=Button(self.master, text="Check for Updates", command=partial(self.onButtonClick, value='update')).grid(row=0, column=1, padx=10, pady=10)
         else:
@@ -579,21 +589,7 @@ class Installer(Frame):
         return self.value
 
     def isInstalled(self):
-        return os.path.isfile(os.path.join(self.data_dir, filename_from_path(sys.executable).strip('.\/')))
-
-    def update_available(self):
-        version = get_program_version(os.path.join(self.data_dir, filename_from_path(sys.executable).strip('.\/')))
-        update = version_check(VERSION, version)
-        if update == 1:
-            logger.info("Upgrade Available")
-            return True
-        elif update == 0:
-            logger.info("Upgrade Not Available")
-            return False
-        else:
-            logger.error("Using older version of installer. Exiting!")
-            Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nYou are using an older version of this program than what is installed.\nPlease use the installed version.", 1)
-            sys.exit(1)
+        return isinstalled(self.data_dir)
 
     def onButtonClick(self, value):
         self.value=value
@@ -635,9 +631,18 @@ def get_current_manifest():
         return open_json(manifest_filename())
     return None
 
+def get_executable():
+    executable = sys.executable
+    if executable.endswith("python.exe") or executable.endswith("python3.exe"):
+        return sys.argv[0]
+    else:
+        return executable
+
 def version_check(this, other):
     A = this.split('.')
     B = other.split('.')
+    if len(A) > len(B):
+        return 1
     # Check Major Version
     if A[0] > B[0]:
         return 1
@@ -662,14 +667,34 @@ def version_check(this, other):
 def get_program_version(filename):
     parser = Dispatch("Scripting.FileSystemObject")
     version = parser.GetFileVersion(filename)
-    return version
+    if version:
+        return version
+    else:
+        return "0"
+
+def upgrade_available(data_dir):
+    installed_version = get_program_version(os.path.join(data_dir, filename_from_path(get_executable()).strip('.\/')))
+    if version_check(VERSION, installed_version) == 1:
+        logger.info("Upgrade Available")
+        return True
+    elif version_check(VERSION, installed_version) == -1:
+        logger.error("Using older version of installer. Exiting!")
+        Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nYou are using an older version of this program than what is installed.\nPlease use the installed version.", 1)
+        sys.exit(1)
+    return False
+
+def upgrade(data_dir):
+    logger.info("Upgrading Modpack Manager to version %s"%VERSION)
+    delete_program(data_dir)
+    copy_program(data_dir)
+
 
 ############################################################
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="1.0.5"
-DEBUG=False
+VERSION="1.0.20"
+DEBUG=True
 
 if __name__ == "__main__":
     quiet=False
@@ -708,6 +733,10 @@ if __name__ == "__main__":
         Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nInstall Java from https://www.java.com/en/download/", 1)
         sys.exit(1)
 
+    print(isinstalled(data_directory) and upgrade_available(data_directory))
+    if isinstalled(data_directory) and upgrade_available(data_directory):
+        upgrade(data_directory)
+
     #No more configuration
     logger.debug("Arguments %s"%sys.argv)
 
@@ -716,7 +745,10 @@ if __name__ == "__main__":
     action = installer_gui()
     logger.debug("Running as Administrator: %s"%is_admin())
     logger.debug("action: "+action)
-    if action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
+    if action == 'upgrade':
+        delete_program(data_directory)
+        copy_program(data_directory)
+    elif action == 'install' and  data_directory != os.path.dirname(os.path.realpath(__file__)) :
         logger.info("Running Modpack Manager Installation.")
         if os.name == 'nt':
             if not quiet:
@@ -787,6 +819,9 @@ if __name__ == "__main__":
                 #
                 latest_modpack_manifest = download_modpack_manifest(modpack[1])
                 current_modpack_manifest=get_current_modpack_manifest(modpack[0]) #get_current_modpack_manifest(os.path.join(modpack_dir, str(filename_from_url(modpack[1]))))
+                if not latest_modpack_manifest:
+                    Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to download latest Manifest from %s\n Please contact an administrator!"%modpack[1], 1)
+                    exit(1)
 
                 if not modpack_isInstalled(modpack[0]):
                     install_modpack(latest_modpack_manifest)
