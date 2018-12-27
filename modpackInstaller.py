@@ -12,6 +12,7 @@ import urllib.request as request
 from urllib.parse import quote, urlparse
 import validators
 from urllib.error import HTTPError, URLError
+from win32com.client import Dispatch
 import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys, tempfile, time, traceback
 
 #####################################
@@ -563,6 +564,8 @@ class Installer(Frame):
         self.server=server
         self.value=None
         if self.isInstalled():
+            if self.update_available():
+                self.upgrade=Button(self.master, text="Upgrade %s Modpack Manager"%self.server, command=partial(self.onButtonClick, value='upgrade')).grid(row=1, column=0, padx=10, pady=10)
             self.uninstall=Button(self.master, text="Uninstall %s Modpack Manager"%self.server, command=partial(self.onButtonClick, value='uninstall')).grid(row=0, column=0, padx=10, pady=10)
             self.update=Button(self.master, text="Check for Updates", command=partial(self.onButtonClick, value='update')).grid(row=0, column=1, padx=10, pady=10)
         else:
@@ -577,6 +580,20 @@ class Installer(Frame):
 
     def isInstalled(self):
         return os.path.isfile(os.path.join(self.data_dir, filename_from_path(sys.executable).strip('.\/')))
+
+    def update_available(self):
+        version = get_program_version(os.path.join(self.data_dir, filename_from_path(sys.executable).strip('.\/')))
+        update = version_check(VERSION, version)
+        if update == 1:
+            logger.info("Upgrade Available")
+            return True
+        elif update == 0:
+            logger.info("Upgrade Not Available")
+            return False
+        else:
+            logger.error("Using older version of installer. Exiting!")
+            Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nYou are using an older version of this program than what is installed.\nPlease use the installed version.", 1)
+            sys.exit(1)
 
     def onButtonClick(self, value):
         self.value=value
@@ -618,11 +635,40 @@ def get_current_manifest():
         return open_json(manifest_filename())
     return None
 
+def version_check(this, other):
+    A = this.split('.')
+    B = other.split('.')
+    # Check Major Version
+    if A[0] > B[0]:
+        return 1
+    elif A[0] < B[0]:
+        return -1
+    # Major verions are equal
+    # Check Minor Version
+    elif A[1] > B[1]:
+        return 1
+    elif A[1] < B[1]:
+        return -1
+    # minor verions are equal
+    # Check bugfix Version
+    elif A[2] > B[2]:
+        return 1
+    elif A[2] < B[2]:
+        return -1
+    #Versions are equal
+    return 0
+
+#   Use Windows built-in versioning to get version of file
+def get_program_version(filename):
+    parser = Dispatch("Scripting.FileSystemObject")
+    version = parser.GetFileVersion(filename)
+    return version
+
 ############################################################
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="1.0.1"
+VERSION="1.0.5"
 DEBUG=False
 
 if __name__ == "__main__":

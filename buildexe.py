@@ -1,18 +1,39 @@
 import os, shutil, argparse, re, sys
 
+SERVERNAME="Related by Gaming"
+
 def files_in_dir(path):
     for file in os.listdir(path):
         if os.path.isfile(os.path.join(path, file)):
             yield file
 
-def delete_spec_files(path):
+def delete_build_files(path):
     for file in files_in_dir(path):
-        if file.endswith('.spec'):
+        if file.endswith('.spec') or file.endswith("_version.txt"):
             os.remove(file)
 
 def delete_directory(path):
     if os.path.isdir(path):
         os.system("RMDIR /S /Q %s"%path)
+
+#####################################
+#   Version File
+#####################################
+def get_version_file(cwd):
+    data = ''
+    with open(os.path.join(cwd, "version_template.txt")) as f:
+        data=f.read()
+    return data
+
+def generate_version_file(cwd, filename, version):
+    version_file_data = get_version_file(cwd)
+    version_file_data = version_file_data.replace("SERVERNAME", SERVERNAME)
+    version_file_data = version_file_data.replace("FILEDESC", filename+'.exe')
+    version_file_data = version_file_data.replace("VERSION", version)
+    version_file_data = version_file_data.replace("PRODNAME", "Kiln's Modpack Suite")
+    with open(os.path.join(cwd,filename+"_version.txt"), 'w+') as f:
+        f.write(version_file_data)
+    return filename+"_version.txt"
 
 #####################################
 #   Get/set Debug
@@ -29,6 +50,14 @@ def set_debug(file, debug=False):
                 f.write(line+"\n")
 
 def get_debug(file):
+    file_data=''
+    with open(file) as f:
+        file_data=f.read()
+    for line in file_data.splitlines():
+        if "DEBUG=" in line:
+            return ( line.split('=')[1] == True )
+
+def get_server_name(file):
     file_data=''
     with open(file) as f:
         file_data=f.read()
@@ -171,7 +200,7 @@ if __name__ == "__main__":
     ####################
     #Delete working directories to start clean
     delete_directory(build)
-    delete_spec_files(cwd)
+    delete_build_files(cwd)
     if args.installer:
         os.remove(installer_release_file)
     elif args.builder:
@@ -192,28 +221,32 @@ if __name__ == "__main__":
     if args.debug:
         debug_args="--win-private-assemblies --icon=rbg_mc.ico"
         if args.installer:
-            os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
+            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(debug_args, installer_version_file, installer_file))
         elif args.builder:
             os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
         else:
-            os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
+            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(debug_args, installer_version_file, installer_file))
             os.system("pyinstaller %s -F %s"%(debug_args, builder_file))
     else:
         installer_release_args="--onedir --noconsole --win-private-assemblies --icon=rbg_mc.ico"
         builder_release_args="--onefile --noconsole --win-private-assemblies --icon=rbg_mc.ico"
         if args.installer:
-            os.system("pyinstaller %s -F %s"%(installer_release_args, installer_file))
+            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(installer_release_args, installer_version_file, installer_file))
         elif args.builder:
             os.system("pyinstaller %s -F %s"%(builder_release_args, installer_file))
         else:
-            os.system("pyinstaller %s -F %s"%(installer_release_args, installer_file))
+            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(installer_release_args, installer_version_file, installer_file))
             os.system("pyinstaller %s -F %s"%(builder_release_args, builder_file))
 
     ################
     #   Clean up
     ################
     delete_directory(build)
-    delete_spec_files(cwd)
+    delete_build_files(cwd)
     #Restore previous
     if pwd != cwd:
         os.chdir(pwd)
