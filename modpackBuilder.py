@@ -313,12 +313,16 @@ class ManifestBuilder(Frame):
         for row in file_data['modlist']:
             self.create_row(row)
 
-VERSION="2.0.0"
+VERSION="3.0.0"
 
 if __name__ == "__main__":
-    if sys.argv[1] == 'version':
-        print("Kiln's Modpack Builder Version: %s"%VERSION)
-        exit(0)
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'version':
+            print("Kiln's Modpack Builder Version: %s"%VERSION)
+            sys.exit(0)
+        else:
+            print("Invalid Usage!")
+            sys.exit(1)
     root=Tk()
 
     app=ModpackBuilder(root)
