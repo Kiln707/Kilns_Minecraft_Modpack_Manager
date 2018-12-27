@@ -507,9 +507,9 @@ def validate_modpack(latest_json):
 #   Program tools
 ##########
 def copy_program(data_dir):
-    logger.debug("Copying program from %s to %s"%( sys.argv[0], os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')) ))
-    with open(os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')), "wb+") as f:
-        logger.debug("Opened %s for writing"%os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')))
+    logger.debug("Copying program from %s to %s"%( sys.executable, os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')) ))
+    with open(os.path.join(data_dir, filename_from_path(sys.executable).strip('.\/')), "wb+") as f:
+        logger.debug("Opened %s for writing"%os.path.join(data_dir, filename_from_path(sys.executable).strip('.\/')))
         with open(sys.argv[0],"rb") as o:
             logger.debug("Opened %s for reading"% sys.argv[0])
             f.write(o.read())
@@ -523,7 +523,7 @@ def schedule(data_dir):
         if result.returncode:
             logger.debug("Auto update was not scheduled, installing")
             with open(os.path.join(data_dir, 'autoupdate.cmd'), 'w+') as f:
-                f.write('%s quiet update'%os.path.join(data_dir, filename_from_path(sys.argv[0]).strip('.\/')))
+                f.write('%s quiet update'%os.path.join(data_dir, filename_from_path(sys.executable).strip('.\/')))
             run("schtasks.exe /CREATE /SC ONLOGON /RU %(user)s /TN %(servername)s_Modpack_Manager /TR %(executable)s"%({'user':getpass.getuser(), 'servername':SERVERNAME, 'executable': os.path.join(data_dir, 'autoupdate.cmd')}), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         else:
             logger.debug("Auto update is already scheduled")
@@ -576,7 +576,7 @@ class Installer(Frame):
         return self.value
 
     def isInstalled(self):
-        return os.path.isfile(os.path.join(self.data_dir, filename_from_path(sys.argv[0]).strip('.\/')))
+        return os.path.isfile(os.path.join(self.data_dir, filename_from_path(sys.executable).strip('.\/')))
 
     def onButtonClick(self, value):
         self.value=value
@@ -622,7 +622,7 @@ def get_current_manifest():
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="2.0.0"
+VERSION="3.0.0"
 DEBUG=False
 
 if __name__ == "__main__":
@@ -641,7 +641,7 @@ if __name__ == "__main__":
     # If we are just checking the version, catch and close quickly.
     if action == 'version':
         print("Kiln's Modpack Installer Version: %s"%VERSION)
-        exit(0)
+        sys.exit(0)
 
     #DO NOT EDIT THESE VARIABLES
     DATA_DIR_NAME=".%s"%SERVERNAME
@@ -656,11 +656,11 @@ if __name__ == "__main__":
     if not minecraft_is_installed():
         logger.error("ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.")
         Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nMinecraft has not been installed or the launcher has not been opened at least one time.\nPlease install Minecraft and open the launcher at least once.", 1)
-        exit(1)
+        sys.exit(1)
     if not is_java_installed():
         logger.error("ERROR! Install Java from https://www.java.com/en/download/")
         Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nInstall Java from https://www.java.com/en/download/", 1)
-        exit(1)
+        sys.exit(1)
 
     #No more configuration
     logger.debug("Arguments %s"%sys.argv)
@@ -679,15 +679,15 @@ if __name__ == "__main__":
                 if not restart_as_admin('install'):
                     logger.error("Failed to schedule")
                     Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to schedule auto-update", 1)
-                    exit(1)
+                    sys.exit(1)
             else:
                 try:
                     schedule(data_directory)
                 except:
                     logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
-                    exit(1)
+                    sys.exit(1)
                 logger.info("Finished schedule")
-                exit(0)
+                sys.exit(0)
         logger.debug("Finished installing initial setup")
     elif action == 'uninstall':
         if os.name == 'nt':
@@ -696,7 +696,7 @@ if __name__ == "__main__":
                 if not restart_as_admin('uninstall'):
                     logger.error('Failed to uninstall')
                     Mbox('Related By Gaming Modpack Installer | ERROR', "ERROR!\nFailed to remove schedule", 1)
-                    exit(1)
+                    sys.exit(1)
                 manifest = get_current_manifest()
                 if manifest:
                     for modpack in manifest['modlist']:
@@ -704,7 +704,7 @@ if __name__ == "__main__":
                 logging.shutdown()
                 delete_directory(data_directory)
                 Mbox('Related By Gaming Modpack Uninstaller', "Uninstallation is complete", 1)
-                exit(0)
+                sys.exit(0)
             else:
                 logger.info("Running Modpack Manager uninstall")
                 try:
@@ -713,11 +713,11 @@ if __name__ == "__main__":
                     delete_directory(data_directory)
                 except:
                     logger.error(sys.exc_info()[0:1], traceback.extract_tb(sys.exc_info()[2]))
-                    exit(1)
-        exit(0)
+                    sys.exit(1)
+        sys.exit(0)
     elif action == 'cancel':
         logger.info("User cancelled operation")
-        exit(0)
+        sys.exit(0)
 
     #TODO, RUN MODPACK MANIPULATIONS HERE FOR MULTI_THREAD
 
@@ -730,7 +730,7 @@ if __name__ == "__main__":
         latest_manifest = download_json(MANIFEST_URL)
         if not latest_manifest:
             logger.error("Failed to download manifest from %s"%MANIFEST_URL)
-            exit(1)
+            sys.exit(1)
         else:
             modpacks=latest_manifest['modlist']
             logger.info('Checking %s modpacks'%len(modpacks))
@@ -763,4 +763,4 @@ if __name__ == "__main__":
     except :
         logger.error("%s %s"%(sys.exc_info()[0:1],traceback.extract_tb(sys.exc_info()[2])))
         input("Please contact an Administrator for help. Press Enter to continue.")
-        exit(1)
+        sys.exit(1)
