@@ -2,6 +2,52 @@ import os, shutil, argparse, re, sys
 
 SERVERNAME="Related by Gaming"
 
+VS_VERSION_INFO = """# UTF-8
+#
+# For more details about fixed file info 'ffi' see:
+# http://msdn.microsoft.com/en-us/library/ms646997.aspx
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    # filevers and prodvers should be always a tuple with four
+    # items: (1, 2, 3, 4)
+    # Set not needed items to zero 0.
+    filevers=%(ver_tup)r,
+    prodvers=%(ver_tup)r,
+    # Contains a bitmask that specifies the valid bits 'flags'r
+    mask=0x3f,
+    # Contains a bitmask that specifies the Boolean attributes
+    # of the file.
+    flags=0x0,
+    # The operating system for which this file was designed.
+    # 0x4 - NT and there is no need to change it.
+    OS=0x4,
+    # The general type of file.
+    # 0x1 - the file is an application.
+    fileType=0x1,
+    # The function of the file.
+    # 0x0 - the function is not defined for this fileType
+    subtype=0x0,
+    # Creation date and time stamp.
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+      StringTable(
+        u'040904E4',
+        [StringStruct(u'FileDescription', u'%(name)s'),
+        StringStruct(u'FileVersion', u'%(ver_str)s'),
+        StringStruct(u'InternalName', u'%(internal_name)s'),
+        StringStruct(u'LegalCopyright', u'Copyright 2018 Kiln707'),
+        StringStruct(u'OriginalFilename', u'%(exe_name)s'),
+        StringStruct(u'ProductName', u'%(prod_name)s'),
+        StringStruct(u'ProductVersion', u'%(ver_str)s')])
+      ]),
+    VarFileInfo([VarStruct(u'Translation', [1033, 1252])])
+  ]
+)"""
+
+
 def files_in_dir(path):
     for file in os.listdir(path):
         if os.path.isfile(os.path.join(path, file)):
@@ -19,20 +65,32 @@ def delete_directory(path):
 #####################################
 #   Version File
 #####################################
-def get_version_file(cwd):
-    data = ''
-    with open(os.path.join(cwd, "version_template.txt")) as f:
-        data=f.read()
-    return data
+def int_or_zero(v):
+        try:
+            return int(v)
+        except ValueError:
+            return 0
 
-def generate_version_file(cwd, filename, version):
-    version_file_data = get_version_file(cwd)
-    version_file_data = version_file_data.replace("SERVERNAME", SERVERNAME)
-    version_file_data = version_file_data.replace("FILEDESC", filename+'.exe')
-    version_file_data = version_file_data.replace("VERSION", version)
-    version_file_data = version_file_data.replace("PRODNAME", "Kiln's Modpack Suite")
-    with open(os.path.join(cwd,filename+"_version.txt"), 'w+') as f:
-        f.write(version_file_data)
+def convert_version_tuple(version):
+    ver_tup = tuple(int_or_zero(v) for v in version.split('.'))
+    # Windows needs 4-tuple.
+    if len(ver_tup) < 4:
+        ver_tup += (0,) * (4-len(ver_tup))
+    elif len(ver_tup) > 4:
+        ver_tup = ver_tup[:4]
+    return ver_tup
+
+def generate_version_file(cwd, name, filename, version):
+    # Write version info.
+    with open(os.path.join(cwd,filename+"_version.txt"), 'w') as f:
+        f.write(VS_VERSION_INFO % {
+            'name': filename,
+            'internal_name': name,
+            'ver_tup': convert_version_tuple(version),
+            'ver_str': version,
+            'prod_name':"Kilns Modpack Suite",
+            'exe_name': filename + ".exe"
+            })
     return filename+"_version.txt"
 
 #####################################
@@ -219,28 +277,33 @@ if __name__ == "__main__":
         print("Setting debug to %s"%args.debug)
         set_debug(installer_file, debug=args.debug)
     if args.debug:
-        debug_args="--win-private-assemblies --icon=rbg_mc.ico"
+        # debug_args="--win-private-assemblies --icon=rbg_mc.ico"
+        debug_args="--onedir --win-private-assemblies --icon=rbg_mc.ico"
         if args.installer:
-            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            installer_version_file = generate_version_file(cwd, "Modpack Installer", INSTALLER_FILENAME, get_version(installer_file))
             os.system("pyinstaller %s --version-file %s -F %s"%(debug_args, installer_version_file, installer_file))
         elif args.builder:
-            os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
+            builder_version_file = generate_version_file(cwd, "Modpack Builder", BUILDER_FILENAME, get_version(builder_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(debug_args, builder_version_file, builder_file))
         else:
-            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            installer_version_file = generate_version_file(cwd, "Modpack Installer", INSTALLER_FILENAME, get_version(installer_file))
+            builder_version_file = generate_version_file(cwd, "Modpack Builder", BUILDER_FILENAME, get_version(builder_file))
             os.system("pyinstaller %s --version-file %s -F %s"%(debug_args, installer_version_file, installer_file))
-            os.system("pyinstaller %s -F %s"%(debug_args, builder_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(debug_args, builder_version_file, builder_file))
     else:
         installer_release_args="--onedir --noconsole --win-private-assemblies --icon=rbg_mc.ico"
         builder_release_args="--onefile --noconsole --win-private-assemblies --icon=rbg_mc.ico"
         if args.installer:
-            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            installer_version_file = generate_version_file(cwd, "Modpack Installer", INSTALLER_FILENAME, get_version(installer_file))
             os.system("pyinstaller %s --version-file %s -F %s"%(installer_release_args, installer_version_file, installer_file))
         elif args.builder:
-            os.system("pyinstaller %s -F %s"%(builder_release_args, installer_file))
+            builder_version_file = generate_version_file(cwd, "Modpack Builder", BUILDER_FILENAME, get_version(builder_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(builder_release_args, builder_version_file, builder_file))
         else:
-            installer_version_file = generate_version_file(cwd, INSTALLER_FILENAME, get_version(installer_file))
+            installer_version_file = generate_version_file(cwd, "Modpack Installer", INSTALLER_FILENAME, get_version(installer_file))
+            builder_version_file = generate_version_file(cwd, "Modpack Builder", BUILDER_FILENAME, get_version(builder_file))
             os.system("pyinstaller %s --version-file %s -F %s"%(installer_release_args, installer_version_file, installer_file))
-            os.system("pyinstaller %s -F %s"%(builder_release_args, builder_file))
+            os.system("pyinstaller %s --version-file %s -F %s"%(builder_release_args, builder_version_file, builder_file))
 
     ################
     #   Clean up
