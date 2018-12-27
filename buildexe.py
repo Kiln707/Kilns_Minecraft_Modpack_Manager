@@ -1,4 +1,4 @@
-import os, shutil, argparse, re
+import os, shutil, argparse, re, sys
 
 def files_in_dir(path):
     for file in os.listdir(path):
@@ -123,9 +123,9 @@ if __name__ == "__main__":
     build=os.path.join(cwd, "build")
     dist=os.path.join(cwd, "dist")
     installer_file=os.path.join(cwd, INSTALLER_FILENAME+".py")
-    installer_release_file=dist=os.path.join(cwd, "dist", INSTALLER_FILENAME+".exe")
+    installer_release_file=os.path.join(cwd, "dist", INSTALLER_FILENAME+".exe")
     builder_file=os.path.join(cwd, BUILDER_FILENAME+".py")
-    builder_release_file=dist=os.path.join(cwd, "dist", BUILDER_FILENAME+".exe")
+    builder_release_file=os.path.join(cwd, "dist", BUILDER_FILENAME+".exe")
 
     #Increment VERSION depending on values passed
     if args.major:
@@ -190,21 +190,24 @@ if __name__ == "__main__":
         print("Setting debug to %s"%args.debug)
         set_debug(installer_file, debug=args.debug)
     if args.debug:
+        debug_args="--win-private-assemblies --icon=rbg_mc.ico"
         if args.installer:
-            os.system("pyinstaller --icon=rbg_mc.ico -F modpackInstaller.py")
+            os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
         elif args.builder:
-            os.system("pyinstaller --icon=rbg_mc.ico -F modpackBuilder.py")
+            os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
         else:
-            os.system("pyinstaller --icon=rbg_mc.ico -F modpackInstaller.py")
-            os.system("pyinstaller --icon=rbg_mc.ico -F modpackBuilder.py")
+            os.system("pyinstaller %s -F %s"%(debug_args, installer_file))
+            os.system("pyinstaller %s -F %s"%(debug_args, builder_file))
     else:
+        installer_release_args="--onedir --noconsole --win-private-assemblies --icon=rbg_mc.ico"
+        builder_release_args="--onefile --noconsole --win-private-assemblies --icon=rbg_mc.ico"
         if args.installer:
-            os.system("pyinstaller --win-private-assemblies --icon=rbg_mc.ico -F modpackInstaller.py")
+            os.system("pyinstaller %s -F %s"%(installer_release_args, installer_file))
         elif args.builder:
-            os.system("pyinstaller --noconsole --icon=rbg_mc.ico -F modpackBuilder.py")
+            os.system("pyinstaller %s -F %s"%(builder_release_args, installer_file))
         else:
-            os.system("pyinstaller --win-private-assemblies --icon=rbg_mc.ico -F modpackInstaller.py")
-            os.system("pyinstaller --noconsole --icon=rbg_mc.ico -F modpackBuilder.py")
+            os.system("pyinstaller %s -F %s"%(installer_release_args, installer_file))
+            os.system("pyinstaller %s -F %s"%(builder_release_args, builder_file))
 
     ################
     #   Clean up
