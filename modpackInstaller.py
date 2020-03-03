@@ -55,7 +55,10 @@ def is_java_installed():
     try:
         subprocess.call(["java","-version"])
     except FileNotFoundError as e:
+        logger.error("Java not found.%s \n %s"%(e, traceback.format_exc()))
         return False
+    except Exception as e:
+        logger.error("Failed to check if Java is installed. %s \n %s"%(e, traceback.format_exc()))
     return True
 
 def is_admin():
@@ -702,7 +705,7 @@ def upgrade(data_dir):
 #   Entry Point
 ############################################################
 # Do not edit, Modified when changes are made
-VERSION="1.0.0"
+VERSION="2.1.0"
 DEBUG=False
 
 if __name__ == "__main__":
