@@ -21,7 +21,7 @@ import ctypes, datetime, getpass, json, logging, os, re, shutil, subprocess, sys
 #   Server name for Modpack, Will be used in connections
 SERVERNAME='Related by Gaming'
 #   URL For the modpack manifest.
-MANIFEST_URL = "http://relatedbygaming.ddns.net/static/files/minecraft/rbg_mc.manifest"
+MANIFEST_URL = "https://files.relatedbygaming.com/minecraft/rbg_mc.manifest"
 
 #####
 #   helpers and Checkers
@@ -115,10 +115,13 @@ def download(url=None):
         response = request.urlopen(url)
         return response.read()
     except HTTPError as e:
+        logger.error(e)
         return None
     except URLError as e:
+        logger.error(e)
         return None
     except Exception as e:
+        logger.error(e)
         return None
     return None
 
